@@ -2,7 +2,7 @@
 
 Racecurve · PGG Engineering · 2026-11-22
 
-A backup after 1.177 ms cut deadline misses from 10.1% to 1.3% at 400 requests/s. At 1,600 requests/s, the same timer raised misses from 26.9% to 98.8%. The deadline was 6 ms in both policies.
+In a two-slot test, a backup after 1.177 ms cut 6 ms deadline misses from 10.1% to 1.3% at 400 requests/s. At 1,600 requests/s, misses rose from 26.9% to 98.8%.
 
 Two replicas shared two worker slots on one host. Both copies ran to completion. The experiment measured 36,800 requests over 12 runs at three offered loads, with two workload seeds and two policies. The clock started at the planned arrival and stopped when the first copy finished.
 
