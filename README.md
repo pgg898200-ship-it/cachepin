@@ -4,13 +4,22 @@
 
 [Open the browser explorer](https://huggingface.co/spaces/pgg-engineering/racecurve) · [Get the measured traces](https://huggingface.co/datasets/pgg-engineering/racecurve-hedge-traces)
 
-## Try it
+## Replay the sample
 
-With Python 3.10 or later in a virtual environment:
+Run the bundled trace with Python 3.10 or later.
+
+```sh
+git clone --depth 1 --branch racecurve https://github.com/pgg898200-ship-it/cachepin.git racecurve
+cd racecurve
+python3 packaging/demo.py
+```
+
+The demo chooses a **1,177 µs** delay on the first 700 requests. On the next 300, primary-only replay misses 27 deadlines. The chosen delay misses **0**, with **42 backups**. Replay keeps each attempt's measured service time fixed.
+
+To install the commands in a virtual environment and replay your own trace, run
 
 ```sh
 python3 -m pip install https://huggingface.co/spaces/pgg-engineering/racecurve/resolve/main/racecurve_tools-0.1.0-py3-none-any.whl
-racecurve-demo
 racecurve-demo your-paired-trace.csv --slo-us 6000 --budget-pct 25
 ```
 

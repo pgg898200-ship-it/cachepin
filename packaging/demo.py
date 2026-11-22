@@ -5,7 +5,6 @@ import csv
 from importlib import resources
 import json
 from pathlib import Path
-import sys
 
 
 def read_trace(stream):
@@ -23,19 +22,25 @@ def read_trace(stream):
 
 
 def choose(pairs, slo, budget):
-    # For integer delay d, a backup fires iff P > d. A request that misses
-    # primary-only is rescued iff d <= slo-B. Objective changes only at a P
-    # or at a rescue cutoff + 1; selected ties prefer fewer launches then d.
-    primary = sorted(p for p, b in pairs)
-    cutoffs = sorted(slo - b + 1 for p, b in pairs if p > slo)
-    primary_misses = len(cutoffs)
-    optimum = (primary_misses, 0, slo + 1)
-    for delay in sorted({0, *(p for p in primary if p <= slo),
-                         *(c for c in cutoffs if 0 < c <= slo)}):
-        launches = len(pairs) - bisect_right(primary, delay)
+    primary_times = sorted(primary for primary, _ in pairs)
+    # For each late primary, this is the first integer delay at which its
+    # backup also misses. Nonpositive values already miss at delay zero.
+    first_miss = sorted(slo - backup + 1 for primary, backup in pairs if primary > slo)
+
+    # Counts change only when a backup stops launching or starts missing.
+    delays = {0}
+    delays.update(time for time in primary_times if time <= slo)
+    delays.update(time for time in first_miss if 0 < time <= slo)
+
+    # Rank by misses, then launches, then earliest delay. Primary-only
+    # starts with zero launches and sorts after any equal-scoring delay.
+    best = (len(first_miss), 0, slo + 1)
+    for delay in delays:
+        launches = len(pairs) - bisect_right(primary_times, delay)
         if 100 * launches <= budget * len(pairs):
-            optimum = min(optimum, (bisect_right(cutoffs, delay), launches, delay))
-    return None if optimum[2] > slo else optimum[2]
+            misses = bisect_right(first_miss, delay)
+            best = min(best, (misses, launches, delay))
+    return best[2] if best[2] <= slo else None
 
 
 def counts(pairs, slo, delay):
@@ -53,7 +58,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.slo_us < 0 or not 0 <= args.budget_pct <= 100:
         parser.error("require a nonnegative SLO and budget percentage from 0 to 100")
-    path = args.trace or resources.files("racecurve_tools").joinpath("loopback.csv")
+    path = args.trace
+    if path is None:
+        if __package__ == "racecurve_tools":
+            path = resources.files(__package__).joinpath("loopback.csv")
+        else:
+            path = Path(__file__).resolve().parents[1] / "examples" / "loopback.csv"
     try:
         with path.open(encoding="utf-8", newline="") as stream:
             pairs = read_trace(stream)
