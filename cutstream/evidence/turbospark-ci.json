@@ -1,0 +1,291 @@
+{
+  "environment": {
+    "upstream": "https://raw.githubusercontent.com/whit3rabbit/turbospark/5ede725e9a1e375fb66d135bc0ab6117bf2a5259/crates/tokenizer/src/stop_matcher.rs",
+    "source_sha256": "e70844fdf4a52854f921061271b8b0687a53ee8c25b76ab3306bc567001ced98",
+    "platform": "Linux-7.0.0-1014-aws-x86_64-with-glibc2.39",
+    "runner": "GitHub Actions 1000000263",
+    "revision": "0e9268834cf2f3c709b3c9615e1ab5dff41992e6",
+    "cxx": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+    "cpu": "Intel(R) Xeon(R) 6975P-C"
+  },
+  "results": [
+    {
+      "stops": 1,
+      "chunk_bytes": 4,
+      "input_bytes": 38400,
+      "chunks": 9616,
+      "output_bytes": 38288,
+      "frame_digest": "5cd17a786a3da604",
+      "median_input_MiB_per_s": {
+        "cutstream": 253.2039481128576,
+        "turbospark": 17.627641260148426
+      },
+      "median_time_ratio_turbospark_over_cutstream": 14.364028878060209,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100059842,
+            "passes": 696,
+            "ns_per_pass": 143764.1408045977
+          },
+          {
+            "elapsed_ns": 100122267,
+            "passes": 697,
+            "ns_per_pass": 143647.4418938307
+          },
+          {
+            "elapsed_ns": 100084525,
+            "passes": 692,
+            "ns_per_pass": 144630.81647398844
+          },
+          {
+            "elapsed_ns": 100097715,
+            "passes": 690,
+            "ns_per_pass": 145069.15217391305
+          },
+          {
+            "elapsed_ns": 100146769,
+            "passes": 686,
+            "ns_per_pass": 145986.54373177842
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 101656568,
+            "passes": 49,
+            "ns_per_pass": 2074623.836734694
+          },
+          {
+            "elapsed_ns": 102004880,
+            "passes": 49,
+            "ns_per_pass": 2081732.2448979593
+          },
+          {
+            "elapsed_ns": 101796580,
+            "passes": 49,
+            "ns_per_pass": 2077481.224489796
+          },
+          {
+            "elapsed_ns": 101649890,
+            "passes": 49,
+            "ns_per_pass": 2074487.551020408
+          },
+          {
+            "elapsed_ns": 100165851,
+            "passes": 48,
+            "ns_per_pass": 2086788.5625
+          }
+        ]
+      }
+    },
+    {
+      "stops": 1,
+      "chunk_bytes": 32,
+      "input_bytes": 38624,
+      "chunks": 1228,
+      "output_bytes": 38512,
+      "frame_digest": "8aa474b0ad33461c",
+      "median_input_MiB_per_s": {
+        "cutstream": 688.6663746954507,
+        "turbospark": 45.18063233452792
+      },
+      "median_time_ratio_turbospark_over_cutstream": 15.242512977605193,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100005372,
+            "passes": 1876,
+            "ns_per_pass": 53307.767590618336
+          },
+          {
+            "elapsed_ns": 100039922,
+            "passes": 1862,
+            "ns_per_pass": 53727.133190118155
+          },
+          {
+            "elapsed_ns": 100019875,
+            "passes": 1855,
+            "ns_per_pass": 53919.07008086253
+          },
+          {
+            "elapsed_ns": 100013893,
+            "passes": 1876,
+            "ns_per_pass": 53312.30970149254
+          },
+          {
+            "elapsed_ns": 100020740,
+            "passes": 1870,
+            "ns_per_pass": 53487.02673796791
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 100206150,
+            "passes": 123,
+            "ns_per_pass": 814684.1463414634
+          },
+          {
+            "elapsed_ns": 100279034,
+            "passes": 123,
+            "ns_per_pass": 815276.6991869919
+          },
+          {
+            "elapsed_ns": 100027232,
+            "passes": 122,
+            "ns_per_pass": 819895.344262295
+          },
+          {
+            "elapsed_ns": 100153363,
+            "passes": 123,
+            "ns_per_pass": 814254.9837398374
+          },
+          {
+            "elapsed_ns": 100462914,
+            "passes": 123,
+            "ns_per_pass": 816771.6585365854
+          }
+        ]
+      }
+    },
+    {
+      "stops": 4,
+      "chunk_bytes": 4,
+      "input_bytes": 38428,
+      "chunks": 9620,
+      "output_bytes": 38288,
+      "frame_digest": "060b645f1285ac32",
+      "median_input_MiB_per_s": {
+        "cutstream": 248.37242407558438,
+        "turbospark": 4.858786545077934
+      },
+      "median_time_ratio_turbospark_over_cutstream": 51.118200351318485,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100141443,
+            "passes": 678,
+            "ns_per_pass": 147701.24336283185
+          },
+          {
+            "elapsed_ns": 100101167,
+            "passes": 675,
+            "ns_per_pass": 148298.0251851852
+          },
+          {
+            "elapsed_ns": 100003746,
+            "passes": 678,
+            "ns_per_pass": 147498.15044247787
+          },
+          {
+            "elapsed_ns": 100040116,
+            "passes": 678,
+            "ns_per_pass": 147551.7935103245
+          },
+          {
+            "elapsed_ns": 100030460,
+            "passes": 680,
+            "ns_per_pass": 147103.61764705883
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 104933820,
+            "passes": 14,
+            "ns_per_pass": 7495272.857142857
+          },
+          {
+            "elapsed_ns": 105596150,
+            "passes": 14,
+            "ns_per_pass": 7542582.142857143
+          },
+          {
+            "elapsed_ns": 105885197,
+            "passes": 14,
+            "ns_per_pass": 7563228.357142857
+          },
+          {
+            "elapsed_ns": 107620642,
+            "passes": 14,
+            "ns_per_pass": 7687188.714285715
+          },
+          {
+            "elapsed_ns": 105202440,
+            "passes": 14,
+            "ns_per_pass": 7514460
+          }
+        ]
+      }
+    },
+    {
+      "stops": 4,
+      "chunk_bytes": 32,
+      "input_bytes": 38652,
+      "chunks": 1228,
+      "output_bytes": 38512,
+      "frame_digest": "98fd58f2c5cbc29a",
+      "median_input_MiB_per_s": {
+        "cutstream": 542.1474939697068,
+        "turbospark": 9.248221051771935
+      },
+      "median_time_ratio_turbospark_over_cutstream": 58.62181396127342,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100011768,
+            "passes": 1488,
+            "ns_per_pass": 67212.20967741935
+          },
+          {
+            "elapsed_ns": 100003495,
+            "passes": 1479,
+            "ns_per_pass": 67615.615280595
+          },
+          {
+            "elapsed_ns": 100017837,
+            "passes": 1470,
+            "ns_per_pass": 68039.34489795918
+          },
+          {
+            "elapsed_ns": 100030497,
+            "passes": 1464,
+            "ns_per_pass": 68326.84221311475
+          },
+          {
+            "elapsed_ns": 100015492,
+            "passes": 1471,
+            "ns_per_pass": 67991.49694085657
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 103325554,
+            "passes": 26,
+            "ns_per_pass": 3974059.769230769
+          },
+          {
+            "elapsed_ns": 102687728,
+            "passes": 26,
+            "ns_per_pass": 3949528
+          },
+          {
+            "elapsed_ns": 103630407,
+            "passes": 26,
+            "ns_per_pass": 3985784.8846153845
+          },
+          {
+            "elapsed_ns": 100376968,
+            "passes": 25,
+            "ns_per_pass": 4015078.72
+          },
+          {
+            "elapsed_ns": 103661601,
+            "passes": 26,
+            "ns_per_pass": 3986984.653846154
+          }
+        ]
+      }
+    }
+  ],
+  "workflow_run": "https://github.com/pgg898200-ship-it/cachepin/actions/runs/45065919328"
+}

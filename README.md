@@ -192,6 +192,8 @@ Verified guarantees (tested in `tests/adversarial_suite.py`, `cargo test --relea
 
 ## Documentation & Registry Links
 
+- [Cutstream](cutstream/) is a standalone output-side companion for gateways that need streaming stop strings. It provides a C++17 header, Python bindings and a reproducible latency comparison.
+
 - Interactive Playground & Explorer: **[pgg898200-ship-it.github.io/cachepin](https://pgg898200-ship-it.github.io/cachepin/)**
 - Official MCP Registry identifier: `mcp-name: io.github.pgg898200-ship-it/cachepin`
 - [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md) — Formal mathematical specification of all 5 mechanisms

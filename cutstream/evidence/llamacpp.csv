@@ -1,0 +1,5 @@
+case,streams,deltas,engine,cpu_ns_per_feed_median,samples_cpu_ns_per_feed
+vercel-openai-text,512,300,cutstream-owned,20.41,21.26 20.41 20.77 21.07 21.24 20.76 13.03 13.26 13.50 15.31 13.05
+vercel-openai-text,512,300,llama-stop-search,48.39,53.54 66.03 68.87 68.57 67.22 48.39 41.42 42.99 45.33 40.93 42.09
+sdk-plus-near-misses,512,302,cutstream-owned,14.66,14.40 17.05 14.66 14.79 16.94 14.05 16.73 14.05 14.07 14.75 14.23
+sdk-plus-near-misses,512,302,llama-stop-search,44.07,44.33 44.05 43.36 43.64 49.15 44.07 47.34 46.29 47.92 42.98 43.29

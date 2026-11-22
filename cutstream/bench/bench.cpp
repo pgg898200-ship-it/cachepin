@@ -5,7 +5,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
@@ -209,10 +209,13 @@ template<class Engine> Stats verify(const Case& spec, bool exact_release) {
     return stats;
 }
 
-template<class Engine> double time_run(const Case& spec, const Stats& expected) {
+struct Timing { double wall_ns, cpu_ns; };
+
+template<class Engine> Timing time_run(const Case& spec, const Stats& expected) {
     Engine engine(spec.patterns);
     std::vector<typename Engine::Cursor> cursors(spec.streams);
     std::uint64_t matches = 0, emitted = 0;
+    auto cpu_begin = std::clock();
     auto begin = Clock::now();
     for (std::size_t off = 0; off < spec.bytes; off += spec.chunk) {
         for (std::size_t i = 0; i < spec.streams; ++i) {
@@ -223,9 +226,11 @@ template<class Engine> double time_run(const Case& spec, const Stats& expected) 
     }
     for (auto& cur : cursors) emitted += engine.finish(cur).size();
     auto end = Clock::now();
+    auto cpu_end = std::clock();
     if (emitted != expected.output_bytes || matches != expected.match_sum)
         throw std::runtime_error("timing mismatch in " + spec.name);
-    return std::chrono::duration<double,std::nano>(end-begin).count() / expected.calls;
+    return {std::chrono::duration<double,std::nano>(end-begin).count() / expected.calls,
+            double(cpu_end-cpu_begin) * 1e9 / CLOCKS_PER_SEC / expected.calls};
 }
 
 int main(int argc, char** argv) {
@@ -240,38 +245,47 @@ int main(int argc, char** argv) {
         make_case("many-shared-start",32,4096,4,false),
         make_case("single-large",1,4096,64,false),
         make_case("four-large",4,4096,64,false,true),
+        make_case("four-bulk",4,4096,256,false,true),
         make_case("many-prefix",32,4096,4,true),
         make_case("single-prefix",1,4096,4,true)
     };
-    std::cout << "case,engine,stops,streams,chunk_bytes,feed_calls,input_bytes,median_ns_per_feed,"
-              << "mean_held_bytes,max_held_bytes,output_bytes,output_fnv64,samples,sample_ns_per_feed\n";
+    std::cout << "case,engine,stops,streams,chunk_bytes,feed_calls,input_bytes,median_wall_ns_per_feed,median_cpu_ns_per_feed,"
+              << "mean_held_bytes,max_held_bytes,output_bytes,output_fnv64,samples,sample_wall_ns_per_feed,sample_cpu_ns_per_feed\n";
     for (const auto& spec : cases) {
         std::array<Stats,3> stats{verify<Cut>(spec,true),verify<Rescan<false>>(spec,true),
                                   verify<Rescan<true>>(spec,false)};
-        std::array<std::vector<double>,3> times;
+        std::array<std::vector<double>,3> wall_times, cpu_times;
         for (int round = -1; round < samples; ++round) {
             for (int shift = 0; shift < 3; ++shift) {
                 int id = (round + 1 + shift) % 3;
-                double ns = id == 0 ? time_run<Cut>(spec,stats[id]) :
+                Timing ns = id == 0 ? time_run<Cut>(spec,stats[id]) :
                             id == 1 ? time_run<Rescan<false>>(spec,stats[id]) :
                                       time_run<Rescan<true>>(spec,stats[id]);
-                if (round >= 0) times[id].push_back(ns);
+                if (round >= 0) {
+                    wall_times[id].push_back(ns.wall_ns);
+                    cpu_times[id].push_back(ns.cpu_ns);
+                }
             }
         }
         constexpr std::array<const char*,3> names{"cutstream","grouped-rescan","fixed-find"};
         for (std::size_t id = 0; id < names.size(); ++id) {
-            auto t = times[id];
-            std::sort(t.begin(), t.end());
-            double median = (t[(t.size()-1)/2] + t[t.size()/2]) * 0.5;
+            auto median = [](std::vector<double> t) {
+                std::sort(t.begin(), t.end());
+                return (t[(t.size()-1)/2] + t[t.size()/2]) * 0.5;
+            };
             auto& s = stats[id];
             std::cout << spec.name << ',' << names[id] << ',' << spec.patterns.words.size() << ','
                       << spec.streams << ',' << spec.chunk << ',' << s.calls << ',' << s.input_bytes
-                      << ',' << std::fixed << std::setprecision(3) << median << ',' << s.avg_held()
+                      << ',' << std::fixed << std::setprecision(3) << median(wall_times[id]) << ','
+                      << median(cpu_times[id]) << ',' << s.avg_held()
                       << ',' << s.max_held << ',' << s.output_bytes << ',' << std::hex
-                      << s.checksum << std::dec << ',' << samples << ',';
-            for (std::size_t i = 0; i < times[id].size(); ++i) {
-                if (i) std::cout << ' ';
-                std::cout << times[id][i];
+                      << s.checksum << std::dec << ',' << samples;
+            for (const auto* values : {&wall_times[id], &cpu_times[id]}) {
+                std::cout << ',';
+                for (std::size_t i = 0; i < values->size(); ++i) {
+                    if (i) std::cout << ' ';
+                    std::cout << (*values)[i];
+                }
             }
             std::cout << '\n';
         }

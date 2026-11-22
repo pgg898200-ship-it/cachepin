@@ -6,6 +6,23 @@
 
 With the stop string `</tool>`, the chunk `hello </to` releases `hello ` immediately. The cursor identifies the withheld `</to` in the shared dictionary. If the next chunk is `ol>tail`, the stream stops after its third byte. If the next chunk is `ast`, the stream releases `</toast`. No caller-owned copy of the preceding chunk needs to survive.
 
+## Measured performance
+
+A public GitHub Actions run compiled Cutstream and TurboSpark v0.7.1's original Rust matcher on an Intel Xeon 6975P-C. Both consumed the same chunks, materialized owned output strings and checked the bytes, frame boundaries and terminal flags against an independent oracle.
+
+| Stops | Chunk size | Cutstream | TurboSpark | Throughput ratio |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 4 bytes | 253.2 MiB/s | 17.6 MiB/s | 14.4× |
+| 1 | 32 bytes | 688.7 MiB/s | 45.2 MiB/s | 15.2× |
+| 4 | 4 bytes | 248.4 MiB/s | 4.9 MiB/s | 51.1× |
+| 4 | 32 bytes | 542.1 MiB/s | 9.2 MiB/s | 58.6× |
+
+These are medians of five alternating samples on 32 interleaved synthetic ASCII streams. Dictionary construction was excluded from both timings. TurboSpark also handles Unicode text, and competing matches can follow different policies. The workloads ensure the two policies agree. [Public run](https://github.com/pgg898200-ship-it/cachepin/actions/runs/45065919328) · [Raw samples](evidence/turbospark-ci.json) · [Reproduction](compare/turbospark/README.md)
+
+**Where it pays off.** On a separate AMD EPYC 9V74, an owned-output replay of 300 recorded SDK deltas across 512 streams took 20.41 CPU ns/feed against 48.39 for llama.cpp's pinned stop-search functions in a bounded-buffer adapter. A native 32-marker near-miss workload with 4,096 interleaved streams took 8.85 CPU ns/feed against 132.43 for a grouped prefix rescanner with equivalent release timing. The results cover host-side matching and emission. [llama.cpp replay](compare/llamacpp.py) · [Raw samples](evidence/llamacpp.csv) · [Native benchmark](bench/README.md)
+
+**Where it loses.** With four stops and 256-byte chunks, fixed-window search took 39.06 CPU ns/feed against Cutstream's 92.77, at the cost of later release. Compiling a fresh one-stop plan for a 64-byte response delivered in one chunk took 1.36 µs in Cutstream against 1.05 µs in vLLM's Python routines. For four-byte chunks with four reusable markers, the same vLLM comparison took 880 ns/feed against Cutstream's 110. [Native samples](bench/results.csv) · [Pinned vLLM routines, cold and warm results](compare/README.md)
+
 ## Install
 
 For C++17, copy [cutstream.hpp](include/cutstream.hpp) into your include path. For Python 3.10+ with a C++17 compiler, install from the public source branch.
@@ -73,4 +90,6 @@ python -m unittest discover -s tests -p 'test_python.py'
 python examples/replay_sdk.py
 ```
 
-MIT licensed. [License](LICENSE)
+For an OpenAI-compatible completions endpoint, run the [SGLang integration example](examples/sglang_completions.py). Its offline mode replays the split-marker case in [SGLang issue 50735](https://github.com/sgl-project/sglang/issues/50735). The issue author submitted an upstream fix; the example shows how to enforce caller-owned stops at the client boundary.
+
+[Adoption evidence](evidence/adoption.md) · MIT licensed. [License](LICENSE)

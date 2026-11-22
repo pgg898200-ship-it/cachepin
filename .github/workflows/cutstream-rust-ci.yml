@@ -1,7 +1,7 @@
 name: Compare native streaming stop matchers
 on:
   push:
-    branches: [cutstream-v0.1]
+    branches: [main, cutstream-v0.1]
     paths:
       - 'cutstream/src/**'
       - 'cutstream/tests/**'
@@ -10,6 +10,13 @@ on:
       - 'cutstream/compare/turbospark/**'
       - 'include/**'
       - 'compare/turbospark/**'
+      - '.github/workflows/cutstream-rust-ci.yml'
+  pull_request:
+    paths:
+      - 'cutstream/include/**'
+      - 'cutstream/src/**'
+      - 'cutstream/tests/**'
+      - 'cutstream/compare/turbospark/**'
       - '.github/workflows/cutstream-rust-ci.yml'
   workflow_dispatch:
 permissions:

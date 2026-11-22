@@ -28,8 +28,7 @@ def load_vllm(local_source):
     if hashlib.sha256(source).hexdigest() != DIGEST:
         raise ValueError("vLLM source differs from the pinned revision")
     tree = ast.parse(source)
-    check = next(node for node in tree.body if node.name == "check_stop_strings"
-                 ) if all(hasattr(node, "name") for node in tree.body) else next(
+    check = next(
         node for node in tree.body if isinstance(node, ast.FunctionDef)
         and node.name == "check_stop_strings"
     )
@@ -87,44 +86,47 @@ def observe(factory, chunks):
         data.append(visible)
         if idx < len(chunks):
             lag.append(received - sent)
-    return data, first, statistics.mean(lag), stream.match
+    return data, first, statistics.mean(lag) if lag else None, stream.match
 
 
 def measure(factory, chunks, loops):
-    start = time.perf_counter_ns()
+    start = time.thread_time_ns()
     total = sum(run_stream(factory, chunks) for _ in range(loops))
-    elapsed = time.perf_counter_ns() - start
+    elapsed = time.thread_time_ns() - start
     if total == 0:
         raise AssertionError("benchmark produced no output")
     return elapsed / (loops * len(chunks))
 
 
-def run_case(check, delta, count, width, repeats):
+def run_case(check, delta, count, width, mixed, repeats, *, cold=False):
     # All stops have the same length and cannot tie on this ASCII fixture.
-    markers = [f"<|stop_{i:03d}|>" for i in range(count)]
+    starts = "<[!{$(@~" if mixed else "<"
+    markers = [f"{starts[i % len(starts)]}|stop_{i:03d}|>" for i in range(count)]
     sentence = "Tool returned 12 records. Next page starts after 0000496. <|stony|> "
-    payload = (sentence * 128)[:8192]
+    payload = (sentence * 128)[:64 if cold else 8192]
     wire = payload + markers[-1]
     text_chunks = [wire[i:i + width] for i in range(0, len(wire), width)]
     byte_chunks = [chunk.encode("ascii") for chunk in text_chunks]
-    plan = Plan([marker.encode("ascii") for marker in markers])
+    byte_markers = [marker.encode("ascii") for marker in markers]
+    plan = Plan(byte_markers)
     holdback = max(map(len, markers)) - 1
 
     def vllm():
-        return VllmStream(markers, check, delta, holdback)
+        return VllmStream(markers, check, delta, max(map(len, markers)) - 1 if cold else holdback)
 
     subjects = {
-        "cutstream": (plan.stream, byte_chunks),
+        "cutstream": ((lambda: Plan(byte_markers).stream()) if cold else plan.stream, byte_chunks),
         "vllm": (vllm, text_chunks),
     }
     samples = {name: [] for name in subjects}
-    row = {"markers": count, "chunk_width_bytes": width, "feeds": len(text_chunks)}
+    row = {"visible_bytes": len(payload), "compile_per_response": cold,
+           "initial_bytes": "mixed" if mixed else "shared", "markers": count, "chunk_width_bytes": width, "feeds": len(text_chunks)}
     for name, (factory, chunks) in subjects.items():
         emitted, first, mean_lag, match = observe(factory, chunks)
         joined = b"".join(emitted) if name == "cutstream" else "".join(emitted).encode("ascii")
         assert joined == payload.encode("ascii")
         assert match == (count - 1 if name == "cutstream" else markers[-1])
-        row[name] = {"first_nonempty_feed": first, "mean_pending_bytes": round(mean_lag, 3)}
+        row[name] = {"first_nonempty_feed": first, "mean_pending_bytes": round(mean_lag, 3) if mean_lag is not None else None}
     loops = max(4, 7000 // len(text_chunks))
     for factory, chunks in subjects.values():
         run_stream(factory, chunks)
@@ -150,9 +152,14 @@ def main():
     if options.repeats < 1:
         args.error("--repeats must be positive")
     check, delta = load_vllm(options.vllm_source)
-    cases = [(n, width) for n in [1, 4, 32] for width in [4, 32, 1024]]
+    cases = [(n, width, mixed) for n in [1, 4, 32] for width in [4, 32, 1024]
+             for mixed in ([False] if n == 1 else [False, True])]
+    # Coalesced gateway deltas and just two stops favor a pair of substring searches.
+    cases += [(2, 1024, True), (2, 4096, True), (4, 4096, True)]
     random.Random(73051).shuffle(cases)
-    rows = [run_case(check, delta, n, width, options.repeats) for n, width in cases]
+    rows = [run_case(check, delta, *case, options.repeats) for case in cases]
+    cold_rows = [run_case(check, delta, n, width, False, options.repeats, cold=True)
+                 for n in [1, 4, 32] for width in [4, 128]]
     cpu = platform.processor()
     cpuinfo = Path("/proc/cpuinfo")
     if cpuinfo.exists():
@@ -160,8 +167,9 @@ def main():
                     if line.startswith("model name")), cpu)
     print(json.dumps({
         "source": SOURCE, "sha256": DIGEST, "python": platform.python_version(),
-        "platform": platform.platform(), "cpu": cpu, "synthetic_visible_bytes": 8192,
-        "samples": sorted(rows, key=lambda row: (row["markers"], row["chunk_width_bytes"])),
+        "platform": platform.platform(), "cpu": cpu, "cold_samples": cold_rows,
+        "timer": "time.thread_time_ns (CPU time)",
+        "samples": sorted(rows, key=lambda row: (row["markers"], row["initial_bytes"], row["chunk_width_bytes"])),
     }, indent=2))
 
 
