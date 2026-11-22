@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>You're on call · Six AI infrastructure drills</title>
+<meta name="description" content="Would you hedge the request, flush the last bytes, or count a cache hit? Six field drills with traces, answers and a runnable Inspect AI task.">
+<link rel="canonical" href="https://pgg898200-ship-it.github.io/cachepin/on-call/">
+<link rel="alternate" type="text/markdown" href="course.md"><link rel="stylesheet" href="field.css">
+<meta property="og:title" content="You're on call · Six AI infrastructure drills">
+<meta property="og:description" content="A backup timer, a split stop string, a missing cache hit. Make the call and replay the evidence.">
+</head><body>
+<nav aria-label="Publisher"><a href="../">PGG Engineering</a><a href="../releases.atom">Release feed</a></nav>
+<header class="intro"><h1>You're on call<span>.</span></h1>
+<p>Would you send the backup, flush the last bytes, or count a cache hit? Make six operating decisions, then check your answers against the traces and code.</p>
+<div class="actions"><a href="$course">Play as a course ↗</a><a href="$reader">Run with Inspect AI ↗</a></div></header>
+<main><aside><h2>Cases</h2><div class="toc">$nav</div></aside>
+<div class="cases">$cards</div></main>
+<footer><a href="cases.jsonl">Download the six cases as JSONL</a><a href="course.md">Course source</a><button id="print" type="button">Print the casebook</button></footer>
+<script>for (const card of document.querySelectorAll('article')) {
+  const details = card.querySelector('details');
+  const buttons = card.querySelectorAll('[data-choice]');
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      for (const other of buttons) other.setAttribute('aria-pressed', String(other === button));
+      const correct = button.dataset.choice === card.dataset.target;
+      card.querySelector('.verdict').textContent = correct ? 'Correct.' : 'Check the outcome.';
+      details.open = true;
+    });
+  }
+  card.querySelector('.permalink').addEventListener('click', () => card.scrollIntoView());
+}
+document.querySelector('#print').addEventListener('click', () => window.print());</script>
+</body></html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>You're on call · Six AI infrastructure drills</title>
+<meta name="description" content="Would you hedge the request, flush the last bytes, or count a cache hit? Six field drills with traces, answers and a runnable Inspect AI task.">
+<link rel="canonical" href="https://pgg898200-ship-it.github.io/cachepin/on-call/">
+<link rel="alternate" type="text/markdown" href="course.md"><link rel="stylesheet" href="field.css">
+<meta property="og:title" content="You're on call · Six AI infrastructure drills">
+<meta property="og:description" content="A backup timer, a split stop string, a missing cache hit. Make the call and replay the evidence.">
+</head><body>
+<nav aria-label="Publisher"><a href="../">PGG Engineering</a><a href="../releases.atom">Release feed</a></nav>
+<header class="intro"><h1>You're on call<span>.</span></h1>
+<p>Would you send the backup, flush the last bytes, or count a cache hit? Make six operating decisions, then check your answers against the traces and code.</p>
+<div class="actions"><a href="https://liascript.github.io/course/?https://pgg898200-ship-it.github.io/cachepin/on-call/course.md">Play as a course ↗</a><a href="https://github.com/pgg898200-ship-it/cachepin/tree/main/examples/on-call">Run with Inspect AI ↗</a></div></header>
+<main><aside><h2>Cases</h2><div class="toc"><a href="#hedge-budget">The backup budget</a><a href="#hedge-queue">The same timer at peak</a><a href="#stop-split">A marker split in two</a><a href="#stop-eof">The last four bytes</a><a href="#cache-first-byte">The first different byte</a><a href="#cache-meter">The missing measurement</a></div></aside>
+<div class="cases"><article id="hedge-budget" data-target="B">
+<header><small>Racecurve</small><h2>The backup budget</h2></header>
+<p>Two replicas share two worker slots. Both copies run to completion. At 400 requests/s, 161 of 1,600 primary-only requests missed 6 ms. A backup after 1.177 ms launched 261 extra copies and reduced misses to 21 of 1,600. You can spend up to 18 extra copies per 100 requests and must keep misses below 2%. Which measured policy meets both limits?</p>
+<ol class="choices"><li><button type="button" data-choice="A"><span>A</span> Primary only</button></li><li><button type="button" data-choice="B"><span>B</span> The 1.177 ms backup</button></li><li><button type="button" data-choice="C"><span>C</span> Neither policy</button></li></ol>
+<details><summary>Reveal answer</summary><div class="result">
+<strong class="verdict" aria-live="polite"></strong><b>The 1.177 ms backup</b>
+<p>The backup used 16.31 extra copies per 100 requests and missed 1.31% of deadlines. Primary only missed 10.06%. These rates pool two short runs at this load.</p><a href="https://github.com/pgg898200-ship-it/cachepin/blob/8f963f09edf68942f9ac6e304e7635d4cf41a27e/experiments/shared-slots/README.md">Read the load experiment</a>
+</div></details>
+<a class="permalink" href="#hedge-budget">Link to this case</a></article>
+<article id="hedge-queue" data-target="C">
+<header><small>Racecurve</small><h2>The same timer at peak</h2></header>
+<p>At 1,600 requests/s, the same two-slot pool saw 1,722 deadline misses among 6,400 requests with primary only. With the backup timer it saw 6,324 misses among 6,400 and launched 6,350 extra copies. If you switch from hedging to primary only for this recorded workload, how many additional requests meet the deadline?</p>
+<ol class="choices"><li><button type="button" data-choice="A"><span>A</span> 26</button></li><li><button type="button" data-choice="B"><span>B</span> 4,678</button></li><li><button type="button" data-choice="C"><span>C</span> 4,602</button></li></ol>
+<details><summary>Reveal answer</summary><div class="result">
+<strong class="verdict" aria-live="polite"></strong><b>4,602</b>
+<p>Primary only met 4,678 deadlines. Hedging met 76. The difference is 4,602 requests. Changing the timer itself would require another run because it changes what enters the shared queue.</p><a href="https://github.com/pgg898200-ship-it/cachepin/blob/f93cc10e6770a7a839f5bb05d9de2c6a3a08fa99/experiments/shared-slots/hedging-under-load.ipynb">Replay the measured requests</a>
+</div></details>
+<a class="permalink" href="#hedge-queue">Link to this case</a></article>
+<article id="stop-split" data-target="A">
+<header><small>Cutstream</small><h2>A marker split in two</h2></header>
+<p>Your gateway suppresses the literal stop marker &lt;/tool&gt; and everything after it. The client should receive each safe byte as soon as possible. The decoded chunks are &#x27;ready:&lt;/to&#x27; and &#x27;ol&gt;next&#x27;. What can the gateway emit on the first chunk, and what does the client see in total?</p>
+<ol class="choices"><li><button type="button" data-choice="A"><span>A</span> First &#x27;ready:&#x27; and total &#x27;ready:&#x27;</button></li><li><button type="button" data-choice="B"><span>B</span> First &#x27;ready:&lt;/to&#x27; and total &#x27;ready:&lt;/to&#x27;</button></li><li><button type="button" data-choice="C"><span>C</span> First nothing and total &#x27;ready:&#x27;</button></li></ol>
+<details><summary>Reveal answer</summary><div class="result">
+<strong class="verdict" aria-live="polite"></strong><b>First &#x27;ready:&#x27; and total &#x27;ready:&#x27;</b>
+<p>The suffix &lt;/to could still complete the stop. Everything before it is safe immediately. The next three bytes complete the marker, so the client receives only ready:.</p><a href="https://github.com/pgg898200-ship-it/cachepin/blob/f551be155fbc44bfcb330cb6826d59aca2dd080b/cutstream/README.md">Replay the streaming matcher</a>
+</div></details>
+<a class="permalink" href="#stop-split">Link to this case</a></article>
+<article id="stop-eof" data-target="B">
+<header><small>Cutstream</small><h2>The last four bytes</h2></header>
+<p>The only stop is &lt;/tool&gt;. A gateway gets &#x27;ready:&lt;/to&#x27; and then an orderly end of stream. It has already emitted &#x27;ready:&#x27;. Which bytes must it emit when it finishes?</p>
+<ol class="choices"><li><button type="button" data-choice="A"><span>A</span> Nothing</button></li><li><button type="button" data-choice="B"><span>B</span> &lt;/to</button></li><li><button type="button" data-choice="C"><span>C</span> &lt;/tool&gt;</button></li></ol>
+<details><summary>Reveal answer</summary><div class="result">
+<strong class="verdict" aria-live="polite"></strong><b>&lt;/to</b>
+<p>The stream ended before the marker completed. The four held bytes are ordinary output. A gateway that discards them silently truncates a valid response.</p><a href="https://github.com/pgg898200-ship-it/cachepin/blob/f551be155fbc44bfcb330cb6826d59aca2dd080b/cutstream/src/cutstream/__init__.py">Inspect the finish path</a>
+</div></details>
+<a class="permalink" href="#stop-eof">Link to this case</a></article>
+<article id="cache-first-byte" data-target="C">
+<header><small>CachePin</small><h2>The first different byte</h2></header>
+<p>Two requests have the same long runbook. Their tool lists start [read_log, find_runbook] and [find_runbook, read_log]. The final user messages differ too. A byte-prefix replay reports 68 matching bytes. With tools serialized before the runbook, which change should you test first to recover the shared prefix while keeping both user requests intact?</p>
+<ol class="choices"><li><button type="button" data-choice="A"><span>A</span> Pad the runbook to the next cache block</button></li><li><button type="button" data-choice="B"><span>B</span> Put both user messages in a shared header</button></li><li><button type="button" data-choice="C"><span>C</span> Emit both tool lists in the same stable order</button></li></ol>
+<details><summary>Reveal answer</summary><div class="result">
+<strong class="verdict" aria-live="polite"></strong><b>Emit both tool lists in the same stable order</b>
+<p>The first mismatch is the first tool name. The v0.2.0 fixture reports zero modeled matched tokens as sent and 1,099 after canonicalization. The two final questions remain distinct. This assumes tool order can be standardized in your application.</p><a href="https://github.com/pgg898200-ship-it/cachepin/tree/adec42973f715c7c2bb935f32dfebdda8ce35e2b/examples/prefix-diff">Compare the two requests</a>
+</div></details>
+<a class="permalink" href="#cache-first-byte">Link to this case</a></article>
+<article id="cache-meter" data-target="A">
+<header><small>CachePin</small><h2>The missing measurement</h2></header>
+<p>The offline replay estimates 1,099 reusable tokens on the second request. A teammate wants to enter 1,099 cache-read tokens in the cost report. Which observation would justify recording that exact number as actual cache reads?</p>
+<ol class="choices"><li><button type="button" data-choice="A"><span>A</span> The provider usage record for that request shows 1,099 cache-read input tokens</button></li><li><button type="button" data-choice="B"><span>B</span> The two requests used the same model and the estimate reproduced twice</button></li><li><button type="button" data-choice="C"><span>C</span> The second response finished faster than the first</button></li></ol>
+<details><summary>Reveal answer</summary><div class="result">
+<strong class="verdict" aria-live="polite"></strong><b>The provider usage record for that request shows 1,099 cache-read input tokens</b>
+<p>The replay estimates prefix reuse. The provider’s usage record measures billed cache reads for the real request. Latency and matching input bytes cannot supply that billing counter.</p><a href="https://github.com/pgg898200-ship-it/cachepin/blob/adec42973f715c7c2bb935f32dfebdda8ce35e2b/README.md">Inspect the replay’s assumptions</a>
+</div></details>
+<a class="permalink" href="#cache-meter">Link to this case</a></article></div></main>
+<footer><a href="cases.jsonl">Download the six cases as JSONL</a><a href="course.md">Course source</a><button id="print" type="button">Print the casebook</button></footer>
+<script>for (const card of document.querySelectorAll('article')) {
+  const details = card.querySelector('details');
+  const buttons = card.querySelectorAll('[data-choice]');
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      for (const other of buttons) other.setAttribute('aria-pressed', String(other === button));
+      const correct = button.dataset.choice === card.dataset.target;
+      card.querySelector('.verdict').textContent = correct ? 'Correct.' : 'Check the outcome.';
+      details.open = true;
+    });
+  }
+  card.querySelector('.permalink').addEventListener('click', () => card.scrollIntoView());
+}
+document.querySelector('#print').addEventListener('click', () => window.print());</script>
+</body></html>
