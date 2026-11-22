@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>PGG Engineering releases</title></head>
+  <body>
+    <outline text="Release notes">
+      <outline text="PGG Engineering examples and results" title="PGG Engineering examples and results" type="rss" xmlUrl="https://pgg898200-ship-it.github.io/cachepin/releases.atom" htmlUrl="https://pgg898200-ship-it.github.io/cachepin/tools/"/>
+    </outline>
+    <outline text="Software releases">
+      <outline text="Backfold releases" title="Backfold releases" type="rss" xmlUrl="https://github.com/pgg898200-ship-it/backfold/releases.atom" htmlUrl="https://github.com/pgg898200-ship-it/backfold/releases"/>
+      <outline text="CachePin releases" title="CachePin releases" type="rss" xmlUrl="https://github.com/pgg898200-ship-it/cachepin/releases.atom" htmlUrl="https://github.com/pgg898200-ship-it/cachepin/releases"/>
+      <outline text="CausalSieve releases" title="CausalSieve releases" type="rss" xmlUrl="https://github.com/pgg898200-ship-it/causalsieve/releases.atom" htmlUrl="https://github.com/pgg898200-ship-it/causalsieve/releases"/>
+      <outline text="ChronoSieve releases" title="ChronoSieve releases" type="rss" xmlUrl="https://github.com/pgg898200-ship-it/chronosieve/releases.atom" htmlUrl="https://github.com/pgg898200-ship-it/chronosieve/releases"/>
+      <outline text="Cloture releases" title="Cloture releases" type="rss" xmlUrl="https://github.com/pgg898200-ship-it/cloture/releases.atom" htmlUrl="https://github.com/pgg898200-ship-it/cloture/releases"/>
+      <outline text="eproc releases" title="eproc releases" type="rss" xmlUrl="https://github.com/pgg898200-ship-it/eproc/releases.atom" htmlUrl="https://github.com/pgg898200-ship-it/eproc/releases"/>
+      <outline text="RankPatch releases" title="RankPatch releases" type="rss" xmlUrl="https://github.com/pgg898200-ship-it/rankpatch/releases.atom" htmlUrl="https://github.com/pgg898200-ship-it/rankpatch/releases"/>
+      <outline text="StreamSieve releases" title="StreamSieve releases" type="rss" xmlUrl="https://github.com/pgg898200-ship-it/streamsieve/releases.atom" htmlUrl="https://github.com/pgg898200-ship-it/streamsieve/releases"/>
+    </outline>
+  </body>
+</opml>
