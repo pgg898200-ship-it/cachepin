@@ -18,3 +18,5 @@ The demo ships with 1,000 complete primary/backup HTTP timings from a constructe
 The selector considers integer delays from zero through the deadline, plus a primary-only option. It rejects policies above the calibration launch budget, minimizes deadline misses, then chooses fewer launches and the smallest delay. A `null` delay represents primary-only. Holdout rows can exceed the calibration launch budget. Full native fanout analysis, observation formats and instrumentation examples are in the [project](https://huggingface.co/spaces/pgg-engineering/racecurve).
 
 To build the wheel from the source distribution, run `python3 packaging/build_wheel.py` from the project root with setuptools, wheel and pip installed. The build stages the original source modules and trace in a temporary directory. The wheel is written to `dist/`.
+
+The static explorer's source download includes the paths listed in [source-files.txt](source-files.txt). Add new public source, measurements and examples there when they should ship. The same list works from a checkout and from an extracted source ZIP.

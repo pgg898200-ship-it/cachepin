@@ -16,6 +16,7 @@ test: racecurve tests/check
 	./tests/check
 	python3 tests/test_cli.py
 	python3 tests/test_demo.py
+	python3 tests/test_site.py
 	python3 -m unittest -q test_bounds
 	python3 -m unittest discover -s integrations -q
 

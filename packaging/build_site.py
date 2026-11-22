@@ -6,17 +6,17 @@ import shutil
 from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-SUFFIXES = {".cpp", ".hpp", ".py", ".csv", ".json", ".jsonl", ".md", ".toml", ".js", ".cjs", ".html", ".css"}
-SPECIAL = {"Makefile", "LICENSE", ".gitignore"}
+MANIFEST = ROOT / "packaging" / "source-files.txt"
+
 
 def source_files():
-    for path in sorted(ROOT.rglob("*")):
-        parts = path.relative_to(ROOT).parts
-        if any(part in {".git", "__pycache__", "dist"} for part in parts):
-            continue
-        load_trace = parts[:3] == ("experiments", "shared-slots", "measured") and path.name.endswith(".csv.gz")
-        if path.is_file() and (path.suffix in SUFFIXES or path.name in SPECIAL or load_trace):
-            yield path
+    files = []
+    for entry in MANIFEST.read_text(encoding="utf-8").splitlines():
+        path = ROOT / entry
+        if not path.is_relative_to(ROOT) or path.resolve() != path or not path.is_file():
+            raise ValueError(f"invalid release file in {MANIFEST.name}: {entry}")
+        files.append(path)
+    return files
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -24,13 +24,15 @@ def main():
     target = parser.parse_args().output.resolve()
     if target == ROOT or ROOT in target.parents:
         parser.error("choose an output directory outside the source tree")
+    files = source_files()
     target.mkdir(parents=True, exist_ok=True)
-    for src in (ROOT/"web").iterdir():
-        shutil.copyfile(src, target/src.name)
+    for src in files:
+        if src.parent == ROOT / "web":
+            shutil.copyfile(src, target / src.name)
     shutil.copyfile(ROOT/"examples"/"loopback.csv", target/"loopback.csv")
     archive = target/"source.zip"
     with ZipFile(archive, "w") as package:
-        for path in source_files():
+        for path in files:
             info = ZipInfo("racecurve/"+path.relative_to(ROOT).as_posix(), (2026,1,1,0,0,0))
             info.compress_type = ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
