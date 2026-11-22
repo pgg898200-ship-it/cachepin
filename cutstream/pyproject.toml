@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pgg-cutstream"
+version = "0.1.0"
+description = "Exact low-latency stop strings for streaming LLM gateways"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+
+[project.scripts]
+cutstream = "cutstream.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

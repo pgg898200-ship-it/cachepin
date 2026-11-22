@@ -1,0 +1,900 @@
+{
+  "source": "https://raw.githubusercontent.com/vllm-project/vllm/0e3c8dbdae9d55149b0fba4e6c1014b4b08c9c73/vllm/v1/engine/detokenizer.py",
+  "sha256": "20d14044b77e701532de1ef48b3f7a3917cd660618d59fc1135aa3899b7f0405",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "cold_samples": [
+    {
+      "visible_bytes": 64,
+      "compile_per_response": true,
+      "initial_bytes": "shared",
+      "markers": 1,
+      "chunk_width_bytes": 4,
+      "feeds": 19,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.778,
+        "ns_per_feed_trials": [
+          179.69,
+          151.3,
+          151.64,
+          147.72,
+          148.16,
+          147.68,
+          148.06
+        ],
+        "median_ns_per_feed": 148.16
+      },
+      "vllm": {
+        "first_nonempty_feed": 3,
+        "mean_pending_bytes": 10.444,
+        "ns_per_feed_trials": [
+          446.74,
+          429.36,
+          427.94,
+          424.53,
+          423.58,
+          427.23,
+          451.69
+        ],
+        "median_ns_per_feed": 427.94
+      },
+      "median_ratio_vllm_over_cutstream": 2.888
+    },
+    {
+      "visible_bytes": 64,
+      "compile_per_response": true,
+      "initial_bytes": "shared",
+      "markers": 1,
+      "chunk_width_bytes": 128,
+      "feeds": 1,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": null,
+        "ns_per_feed_trials": [
+          1386.66,
+          1342.43,
+          1352.1,
+          1369.55,
+          1280.51,
+          1359.16,
+          1496.66
+        ],
+        "median_ns_per_feed": 1359.16
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": null,
+        "ns_per_feed_trials": [
+          1087.83,
+          1048.4,
+          1021.19,
+          1053.56,
+          1063.29,
+          1013.5,
+          2304.86
+        ],
+        "median_ns_per_feed": 1053.56
+      },
+      "median_ratio_vllm_over_cutstream": 0.775
+    },
+    {
+      "visible_bytes": 64,
+      "compile_per_response": true,
+      "initial_bytes": "shared",
+      "markers": 4,
+      "chunk_width_bytes": 4,
+      "feeds": 19,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.778,
+        "ns_per_feed_trials": [
+          175.01,
+          214.66,
+          209.04,
+          199.31,
+          180.51,
+          184.38,
+          178.88
+        ],
+        "median_ns_per_feed": 184.38
+      },
+      "vllm": {
+        "first_nonempty_feed": 3,
+        "mean_pending_bytes": 10.444,
+        "ns_per_feed_trials": [
+          799.85,
+          762.42,
+          853.88,
+          729.44,
+          807.45,
+          798.14,
+          806.27
+        ],
+        "median_ns_per_feed": 799.85
+      },
+      "median_ratio_vllm_over_cutstream": 4.338
+    },
+    {
+      "visible_bytes": 64,
+      "compile_per_response": true,
+      "initial_bytes": "shared",
+      "markers": 4,
+      "chunk_width_bytes": 128,
+      "feeds": 1,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": null,
+        "ns_per_feed_trials": [
+          3079.46,
+          2904.58,
+          2827.21,
+          1666.65,
+          1643.55,
+          1645.87,
+          1802.77
+        ],
+        "median_ns_per_feed": 1802.77
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": null,
+        "ns_per_feed_trials": [
+          2921.07,
+          3436.9,
+          1624.11,
+          1522.11,
+          1540.05,
+          1544.78,
+          1521.74
+        ],
+        "median_ns_per_feed": 1544.78
+      },
+      "median_ratio_vllm_over_cutstream": 0.857
+    },
+    {
+      "visible_bytes": 64,
+      "compile_per_response": true,
+      "initial_bytes": "shared",
+      "markers": 32,
+      "chunk_width_bytes": 4,
+      "feeds": 19,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.778,
+        "ns_per_feed_trials": [
+          359.08,
+          363.47,
+          374.37,
+          397.86,
+          379.06,
+          362.72,
+          347.16
+        ],
+        "median_ns_per_feed": 363.47
+      },
+      "vllm": {
+        "first_nonempty_feed": 3,
+        "mean_pending_bytes": 10.444,
+        "ns_per_feed_trials": [
+          3961.15,
+          3882.38,
+          4456.66,
+          3817.91,
+          3825.99,
+          3509.14,
+          3460.91
+        ],
+        "median_ns_per_feed": 3825.99
+      },
+      "median_ratio_vllm_over_cutstream": 10.526
+    },
+    {
+      "visible_bytes": 64,
+      "compile_per_response": true,
+      "initial_bytes": "shared",
+      "markers": 32,
+      "chunk_width_bytes": 128,
+      "feeds": 1,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": null,
+        "ns_per_feed_trials": [
+          5110.85,
+          6994.82,
+          8149.87,
+          5287.85,
+          5111.19,
+          5436.54,
+          5241.53
+        ],
+        "median_ns_per_feed": 5287.85
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": null,
+        "ns_per_feed_trials": [
+          6066.73,
+          5957.83,
+          6619.46,
+          6064.8,
+          7014.43,
+          5934.72,
+          5879.66
+        ],
+        "median_ns_per_feed": 6064.8
+      },
+      "median_ratio_vllm_over_cutstream": 1.147
+    }
+  ],
+  "timer": "time.thread_time_ns (CPU time)",
+  "samples": [
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 1,
+      "chunk_width_bytes": 4,
+      "feeds": 2051,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.123,
+        "ns_per_feed_trials": [
+          101.33,
+          103.07,
+          101.41,
+          103.5,
+          99.69,
+          114.51,
+          102.77
+        ],
+        "median_ns_per_feed": 102.77
+      },
+      "vllm": {
+        "first_nonempty_feed": 3,
+        "mean_pending_bytes": 10.995,
+        "ns_per_feed_trials": [
+          597.95,
+          535.85,
+          536.96,
+          540.98,
+          550.75,
+          606.16,
+          550.16
+        ],
+        "median_ns_per_feed": 550.16
+      },
+      "median_ratio_vllm_over_cutstream": 5.353
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 1,
+      "chunk_width_bytes": 32,
+      "feeds": 257,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.117,
+        "ns_per_feed_trials": [
+          105.53,
+          121.98,
+          108.19,
+          126.73,
+          136.34,
+          110.09,
+          105.34
+        ],
+        "median_ns_per_feed": 110.09
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          613.11,
+          609.63,
+          572.44,
+          1235.32,
+          761.56,
+          611.06,
+          711.15
+        ],
+        "median_ns_per_feed": 613.11
+      },
+      "median_ratio_vllm_over_cutstream": 5.569
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 1,
+      "chunk_width_bytes": 1024,
+      "feeds": 9,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0,
+        "ns_per_feed_trials": [
+          301.38,
+          283.12,
+          283.9,
+          282.72,
+          285.22,
+          288.36,
+          285.47
+        ],
+        "median_ns_per_feed": 285.22
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          1035.41,
+          1026.57,
+          1221.58,
+          1029.75,
+          1138.71,
+          1074.82,
+          1032.5
+        ],
+        "median_ns_per_feed": 1035.41
+      },
+      "median_ratio_vllm_over_cutstream": 3.63
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 2,
+      "chunk_width_bytes": 1024,
+      "feeds": 9,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0,
+        "ns_per_feed_trials": [
+          546.29,
+          584.51,
+          592.8,
+          612.22,
+          558.32,
+          516.93,
+          553.62
+        ],
+        "median_ns_per_feed": 558.32
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          1505.0,
+          1448.79,
+          1467.27,
+          1418.24,
+          1505.35,
+          1379.48,
+          1451.73
+        ],
+        "median_ns_per_feed": 1451.73
+      },
+      "median_ratio_vllm_over_cutstream": 2.6
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 2,
+      "chunk_width_bytes": 4096,
+      "feeds": 3,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0,
+        "ns_per_feed_trials": [
+          2206.4,
+          1907.44,
+          2238.7,
+          2156.98,
+          2179.97,
+          1863.91,
+          1915.33
+        ],
+        "median_ns_per_feed": 2156.98
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          2957.88,
+          2869.81,
+          3268.38,
+          3255.8,
+          3573.26,
+          3389.14,
+          3752.17
+        ],
+        "median_ns_per_feed": 3268.38
+      },
+      "median_ratio_vllm_over_cutstream": 1.515
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 4,
+      "chunk_width_bytes": 4,
+      "feeds": 2051,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.123,
+        "ns_per_feed_trials": [
+          147.36,
+          111.33,
+          101.97,
+          104.5,
+          110.38,
+          127.89,
+          103.23
+        ],
+        "median_ns_per_feed": 110.38
+      },
+      "vllm": {
+        "first_nonempty_feed": 3,
+        "mean_pending_bytes": 10.995,
+        "ns_per_feed_trials": [
+          913.04,
+          939.58,
+          880.63,
+          880.23,
+          861.0,
+          862.49,
+          863.28
+        ],
+        "median_ns_per_feed": 880.23
+      },
+      "median_ratio_vllm_over_cutstream": 7.974
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 4,
+      "chunk_width_bytes": 32,
+      "feeds": 257,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.117,
+        "ns_per_feed_trials": [
+          120.6,
+          113.48,
+          112.68,
+          122.35,
+          114.05,
+          113.62,
+          133.4
+        ],
+        "median_ns_per_feed": 114.05
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          977.61,
+          916.72,
+          914.96,
+          912.38,
+          932.87,
+          923.59,
+          954.04
+        ],
+        "median_ns_per_feed": 923.59
+      },
+      "median_ratio_vllm_over_cutstream": 8.098
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 4,
+      "chunk_width_bytes": 1024,
+      "feeds": 9,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0,
+        "ns_per_feed_trials": [
+          725.44,
+          662.13,
+          623.91,
+          605.81,
+          540.32,
+          559.42,
+          612.33
+        ],
+        "median_ns_per_feed": 612.33
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          2487.72,
+          2558.86,
+          2317.7,
+          2517.63,
+          2424.24,
+          2310.68,
+          2707.67
+        ],
+        "median_ns_per_feed": 2487.72
+      },
+      "median_ratio_vllm_over_cutstream": 4.063
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 4,
+      "chunk_width_bytes": 4096,
+      "feeds": 3,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0,
+        "ns_per_feed_trials": [
+          2089.11,
+          2264.1,
+          2239.34,
+          1508.47,
+          1487.62,
+          1538.26,
+          1480.23
+        ],
+        "median_ns_per_feed": 1538.26
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          4905.47,
+          4602.94,
+          5160.34,
+          4948.84,
+          5409.12,
+          5115.38,
+          7335.98
+        ],
+        "median_ns_per_feed": 5115.38
+      },
+      "median_ratio_vllm_over_cutstream": 3.325
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 4,
+      "chunk_width_bytes": 4,
+      "feeds": 2051,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.123,
+        "ns_per_feed_trials": [
+          103.95,
+          102.53,
+          101.26,
+          122.89,
+          101.2,
+          102.0,
+          103.14
+        ],
+        "median_ns_per_feed": 102.53
+      },
+      "vllm": {
+        "first_nonempty_feed": 3,
+        "mean_pending_bytes": 10.995,
+        "ns_per_feed_trials": [
+          844.14,
+          894.24,
+          886.34,
+          907.98,
+          898.8,
+          921.64,
+          905.7
+        ],
+        "median_ns_per_feed": 898.8
+      },
+      "median_ratio_vllm_over_cutstream": 8.767
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 4,
+      "chunk_width_bytes": 32,
+      "feeds": 257,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.117,
+        "ns_per_feed_trials": [
+          109.81,
+          110.0,
+          111.69,
+          114.32,
+          109.62,
+          113.19,
+          112.05
+        ],
+        "median_ns_per_feed": 111.69
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          958.06,
+          925.46,
+          907.1,
+          915.61,
+          941.89,
+          1011.84,
+          981.5
+        ],
+        "median_ns_per_feed": 941.89
+      },
+      "median_ratio_vllm_over_cutstream": 8.433
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 4,
+      "chunk_width_bytes": 1024,
+      "feeds": 9,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0,
+        "ns_per_feed_trials": [
+          284.9,
+          297.66,
+          288.77,
+          291.05,
+          281.0,
+          298.3,
+          298.57
+        ],
+        "median_ns_per_feed": 291.05
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          2244.84,
+          2190.87,
+          2264.99,
+          2222.82,
+          2337.15,
+          2238.16,
+          2206.29
+        ],
+        "median_ns_per_feed": 2238.16
+      },
+      "median_ratio_vllm_over_cutstream": 7.69
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 32,
+      "chunk_width_bytes": 4,
+      "feeds": 2051,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.123,
+        "ns_per_feed_trials": [
+          102.6,
+          103.88,
+          99.58,
+          134.0,
+          107.5,
+          104.1,
+          103.84
+        ],
+        "median_ns_per_feed": 103.88
+      },
+      "vllm": {
+        "first_nonempty_feed": 3,
+        "mean_pending_bytes": 10.995,
+        "ns_per_feed_trials": [
+          3747.99,
+          3838.53,
+          3927.6,
+          4059.35,
+          3840.66,
+          3768.66,
+          4490.45
+        ],
+        "median_ns_per_feed": 3840.66
+      },
+      "median_ratio_vllm_over_cutstream": 36.971
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 32,
+      "chunk_width_bytes": 32,
+      "feeds": 257,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.117,
+        "ns_per_feed_trials": [
+          170.6,
+          114.04,
+          109.18,
+          114.36,
+          113.49,
+          126.8,
+          115.28
+        ],
+        "median_ns_per_feed": 114.36
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          6553.79,
+          4903.69,
+          4532.25,
+          4621.38,
+          4238.17,
+          4492.64,
+          4306.71
+        ],
+        "median_ns_per_feed": 4532.25
+      },
+      "median_ratio_vllm_over_cutstream": 39.632
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "mixed",
+      "markers": 32,
+      "chunk_width_bytes": 1024,
+      "feeds": 9,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0,
+        "ns_per_feed_trials": [
+          770.12,
+          1025.21,
+          2300.42,
+          572.65,
+          565.25,
+          833.29,
+          816.19
+        ],
+        "median_ns_per_feed": 816.19
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          17064.86,
+          23594.57,
+          18351.92,
+          14728.59,
+          16647.63,
+          17134.81,
+          15591.66
+        ],
+        "median_ns_per_feed": 17064.86
+      },
+      "median_ratio_vllm_over_cutstream": 20.908
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 32,
+      "chunk_width_bytes": 4,
+      "feeds": 2051,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.123,
+        "ns_per_feed_trials": [
+          104.37,
+          113.64,
+          109.12,
+          117.54,
+          112.44,
+          114.49,
+          142.98
+        ],
+        "median_ns_per_feed": 113.64
+      },
+      "vllm": {
+        "first_nonempty_feed": 3,
+        "mean_pending_bytes": 10.995,
+        "ns_per_feed_trials": [
+          3861.55,
+          3680.1,
+          3695.86,
+          3764.88,
+          3818.69,
+          3925.15,
+          3770.73
+        ],
+        "median_ns_per_feed": 3770.73
+      },
+      "median_ratio_vllm_over_cutstream": 33.181
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 32,
+      "chunk_width_bytes": 32,
+      "feeds": 257,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0.117,
+        "ns_per_feed_trials": [
+          124.53,
+          111.25,
+          108.74,
+          387.43,
+          108.65,
+          127.7,
+          125.82
+        ],
+        "median_ns_per_feed": 124.53
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          4690.32,
+          4591.65,
+          6743.89,
+          6355.64,
+          4927.89,
+          5026.95,
+          5647.57
+        ],
+        "median_ns_per_feed": 5026.95
+      },
+      "median_ratio_vllm_over_cutstream": 40.366
+    },
+    {
+      "visible_bytes": 8192,
+      "compile_per_response": false,
+      "initial_bytes": "shared",
+      "markers": 32,
+      "chunk_width_bytes": 1024,
+      "feeds": 9,
+      "cutstream": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 0,
+        "ns_per_feed_trials": [
+          344.5,
+          309.46,
+          291.91,
+          304.62,
+          344.07,
+          293.6,
+          299.93
+        ],
+        "median_ns_per_feed": 304.62
+      },
+      "vllm": {
+        "first_nonempty_feed": 1,
+        "mean_pending_bytes": 11,
+        "ns_per_feed_trials": [
+          13490.06,
+          13495.4,
+          13965.35,
+          13395.27,
+          13254.01,
+          13720.64,
+          13794.86
+        ],
+        "median_ns_per_feed": 13495.4
+      },
+      "median_ratio_vllm_over_cutstream": 44.302
+    }
+  ]
+}
