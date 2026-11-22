@@ -68,6 +68,7 @@ The first three results are local measurements. The last uses a simulated access
 ## Integrations and related tools
 
 - [Integration guide](docs/INTEGRATIONS.md) covers Claude Code, Codex, cloud APIs, self-hosted inference, Python and MCP.
+- [Official MCP Registry listing](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.pgg898200-ship-it%2Fcachepin) includes the versioned desktop extension and its checksum. Registry identifier: `mcp-name: io.github.pgg898200-ship-it/cachepin`.
 - [Agent index](llms.txt) points to command syntax, tool schemas, inputs and output fields. [Agent skill](SKILL.md)
 - [Prefix Atlas](tools/prefix-atlas/) sizes a prefix cache for a target hit rate. [Open the capacity calculator](https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/).
 - [Cutstream](cutstream/) detects stop strings in the gateway's output stream.

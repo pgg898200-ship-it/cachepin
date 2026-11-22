@@ -14,6 +14,7 @@ Run `cachepin diff a.json b.json --mode json --provider anthropic --json` on two
 ## Choose an entry point
 
 - [CLI source and flags](https://github.com/pgg898200-ship-it/cachepin/blob/main/src/cli.rs). Use `audit` on a trace, `optimize` on one request, and `proxy` between the agent and upstream.
+- [Official MCP Registry record](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.pgg898200-ship-it%2Fcachepin). Use the versioned MCPB package URL and SHA-256 for desktop installation.
 - [MCP schemas and implementation](https://github.com/pgg898200-ship-it/cachepin/blob/main/src/mcp.rs). Start `cachepin mcp`, then use `tools/list` for the schemas of `diagnose_diff`, `optimize_prompt`, `audit_trace`, `plan_breakpoints`, and `route_simulate`.
 - [Integration guide](https://github.com/pgg898200-ship-it/cachepin/blob/main/docs/INTEGRATIONS.md). Configure a model API, vLLM/SGLang fleet, Python binding, or MCP client.
 - [Agent skill](https://github.com/pgg898200-ship-it/cachepin/blob/main/SKILL.md). Additional CLI and integration workflows.

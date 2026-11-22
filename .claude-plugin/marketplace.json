@@ -4,13 +4,13 @@
     "name": "CachePin Contributors"
   },
   "metadata": {
-    "description": "Official distribution channel for cachepin — zero-dependency Rust + AVX2 lossless multi-agent prompt/KV-cache optimizer."
+    "description": "CachePin for Claude Code. Diagnose prompt-cache misses before changing the agent or model endpoint."
   },
   "plugins": [
     {
       "name": "cachepin",
       "source": "./",
-      "description": "Diagnose ~/.claude/projects & ~/.codex/sessions cache waste, canonicalize multi-agent prefixes losslessly (AVX2/NEON), solve exact 1h/5m breakpoints, coalesce cold swarm herds, and route vLLM/SGLang clusters.",
+      "description": "Find the first byte where two requests diverge. Audit local traces, normalize tool order, and inspect modeled cache reuse through MCP.",
       "version": "0.2.0",
       "category": "performance",
       "tags": ["prompt-cache", "kv-cache", "multi-agent", "mcp", "vllm", "claude-code", "codex"]
