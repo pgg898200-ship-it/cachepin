@@ -3,7 +3,7 @@
   <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom</id>
   <title>PGG Engineering release notes</title>
   <subtitle>Runnable examples and measured results from PGG Engineering.</subtitle>
-  <updated>2026-11-22T21:12:00Z</updated>
+  <updated>2026-11-22T21:32:31Z</updated>
   <author>
     <name>PGG Engineering</name>
     <uri>https://github.com/pgg898200-ship-it</uri>
@@ -11,6 +11,17 @@
   <link rel="self" type="application/atom+xml" href="https://pgg898200-ship-it.github.io/cachepin/releases.atom"/>
   <link rel="alternate" type="text/html" href="https://github.com/pgg898200-ship-it/streamsieve/blob/main/PRODUCTS.md"/>
   <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>
+  <entry>
+    <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom#event-routing-compiler-explorer</id>
+    <title>Three C++ examples you can edit in Compiler Explorer</title>
+    <updated>2026-11-22T21:32:31Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/pgg898200-ship-it/streamsieve/blob/main/PRODUCTS.md#state-replication-and-event-routing"/>
+    <link rel="related" title="Run Afterkey" href="https://godbolt.org/z/Tz3sP7KMj"/>
+    <link rel="related" title="Run KthWake" href="https://godbolt.org/z/no6T73qfr"/>
+    <link rel="related" title="Run Guardshift" href="https://godbolt.org/z/d5jYnjzKW"/>
+    <category term="event processing"/>
+    <summary>Move a reader’s cursor in Afterkey to see which keys changed and which were deleted. Change an arrival time in KthWake to see when a threshold turns on and when it expires during silence. Change the queue and worker capacity in Guardshift to see when a waiting job becomes eligible. Each example includes the C++ implementation and runs in your browser on Compiler Explorer’s GCC backend.</summary>
+  </entry>
   <entry>
     <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom#racecurve-shared-slots</id>
     <title>Racecurve measures when a backup request makes the queue slower</title>
