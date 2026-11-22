@@ -43,12 +43,19 @@ Start with `--mode json` for key and tool ordering. The `hoist` and `swarm` mode
 
 ## Install
 
-Download a Linux or macOS binary from the [release assets](https://github.com/pgg898200-ship-it/cachepin/releases/latest), or build the Rust CLI locally:
+The v0.2.0 release includes Linux and macOS binaries for x86-64 and ARM64. With Git, curl and tar installed, get the CLI and run the example from a fresh directory:
 
 ```sh
-git clone https://github.com/pgg898200-ship-it/cachepin.git
+git clone --depth 1 https://github.com/pgg898200-ship-it/cachepin.git
 cd cachepin
-cargo build --release --locked
+CACHEPIN_VERSION=v0.2.0 CACHEPIN_PREFIX="$PWD/.local/bin" sh scripts/install.sh
+./.local/bin/cachepin diff examples/prefix-diff/a.json examples/prefix-diff/b.json --mode json --provider anthropic --json
+```
+
+The example runs locally. The [release assets](https://github.com/pgg898200-ship-it/cachepin/releases/tag/v0.2.0) include archives and SHA-256 checksums. To build the same CLI from the checkout with Rust:
+
+```sh
+cargo build --release --locked --offline
 ./target/release/cachepin diff examples/prefix-diff/a.json examples/prefix-diff/b.json --mode json --provider anthropic --json
 ```
 
@@ -63,7 +70,7 @@ The Rust crate has zero external crate dependencies. The [installer](scripts/ins
 | Send 32 concurrent requests to the local test upstream | 32 cold writes in the baseline, 1 with coalescing |
 | Replay a synthetic 32-agent coding workload | 2.24% modeled cache hits before normalization and 98.44% after |
 
-The first three results are local measurements. The last uses a simulated access pattern and pricing profile. [Recorded results](benchmarks/results.json) · [Reproduce the benchmark](scripts/verify.sh) · [Method and implementation](docs/ALGORITHMS.md)
+The first three results are local measurements. The cold-write count depends on how many requests overlap during the mock server’s 25 ms cold-write window. A second run of the [32-client loopback benchmark](benchmarks/repro_thundering_herd.py) with the v0.2.0 Linux x86-64 binary produced 5 cold writes with coalescing off and 1 with it on. All 32 requests in each run returned HTTP 200. The last table row uses a simulated access pattern and pricing profile. [Recorded results](benchmarks/results.json) · [Reproduce the benchmark](scripts/verify.sh) · [Method and implementation](docs/ALGORITHMS.md)
 
 ## Integrations and related tools
 
