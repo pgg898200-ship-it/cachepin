@@ -14,7 +14,8 @@ def source_files():
         parts = path.relative_to(ROOT).parts
         if any(part in {".git", "__pycache__", "dist"} for part in parts):
             continue
-        if path.is_file() and (path.suffix in SUFFIXES or path.name in SPECIAL):
+        load_trace = parts[:3] == ("experiments", "shared-slots", "measured") and path.name.endswith(".csv.gz")
+        if path.is_file() and (path.suffix in SUFFIXES or path.name in SPECIAL or load_trace):
             yield path
 
 def main():

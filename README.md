@@ -21,6 +21,7 @@ The 15 KB wheel includes the example and requires only the Python standard libra
 | Experiment | Observed outcome |
 | --- | --- |
 | Prospective localhost HTTP A/B with controlled stalls | At a delay fixed in advance at 1,177 µs, 6 ms deadline misses fell from 80 to 9 in 1,000 matched requests. The client issued 126 backups. Median latency rose from 789 to 810 µs. |
+| [Two shared execution slots, 36,800 live requests](experiments/shared-slots/README.md) | The same 1,177 µs delay cut 6 ms misses from 10.1% to 1.3% at 400 requests/s. At 1,600 requests/s it raised misses from 26.9% to 98.8% as backups competed for the shared slots. |
 | Independent GPUHedge RunPod and Modal cold-start data | With an initial 25% launch budget, the policy still missed 11 of 36 deadlines on the later rounds. A 10 s delay cut misses to one and launched 11 backups (30.6%). |
 | Agreement with upstream GPUHedge replay | Deadline-miss and launch counts matched upstream at every one of 6,002 delay/partition combinations. These were 54 measured request pairs, reused across delays. |
 
