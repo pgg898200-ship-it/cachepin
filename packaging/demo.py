@@ -1,7 +1,6 @@
 """Choose a hedge delay on a calibration split, then report held-out results."""
 import argparse
 from bisect import bisect_right
-from collections import Counter
 import csv
 from importlib import resources
 import json
@@ -23,27 +22,25 @@ def read_trace(stream):
 
 
 def choose(pairs, slo, budget):
-    """Minimize misses, then launches, then delay under the launch budget."""
-    # Between primary completions the launch count stays fixed, and waiting
-    # longer can only lose rescues. The earliest delay in each interval wins.
-    completions = Counter({0: 0})
-    miss_starts = []
-    for primary, backup in pairs:
-        if primary <= slo:
-            completions[primary] += 1
-        else:
-            # The primary already misses. Its backup also misses from this delay on.
-            miss_starts.append(slo - backup + 1)
+    primary_times = sorted(primary for primary, _ in pairs)
+    # For each late primary, this is the first integer delay at which its
+    # backup also misses. Nonpositive values already miss at delay zero.
+    first_miss = sorted(slo - backup + 1 for primary, backup in pairs if primary > slo)
 
-    miss_starts.sort()
-    best = (len(miss_starts), 0, slo + 1)  # Backups off.
-    launches = len(pairs)
-    for delay, finished in sorted(completions.items()):
-        launches -= finished
+    # Between primary completions, launches stay fixed and misses can only
+    # increase. Only the earliest delay in each interval can win.
+    delays = {0}
+    delays.update(time for time in primary_times if time <= slo)
+
+    # Rank by misses, then launches, then earliest delay. Primary-only
+    # starts with zero launches and sorts after any equal-scoring delay.
+    best = (len(first_miss), 0, slo + 1)
+    for delay in delays:
+        launches = len(pairs) - bisect_right(primary_times, delay)
         if 100 * launches <= budget * len(pairs):
-            misses = bisect_right(miss_starts, delay)
+            misses = bisect_right(first_miss, delay)
             best = min(best, (misses, launches, delay))
-    return None if best[2] > slo else best[2]
+    return best[2] if best[2] <= slo else None
 
 
 def counts(pairs, slo, delay):
@@ -61,7 +58,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.slo_us < 0 or not 0 <= args.budget_pct <= 100:
         parser.error("require a nonnegative SLO and budget percentage from 0 to 100")
-    path = args.trace or resources.files("racecurve_tools").joinpath("loopback.csv")
+    path = args.trace
+    if path is None:
+        if __package__ == "racecurve_tools":
+            path = resources.files(__package__).joinpath("loopback.csv")
+        else:
+            path = Path(__file__).resolve().parents[1] / "examples" / "loopback.csv"
     try:
         with path.open(encoding="utf-8", newline="") as stream:
             pairs = read_trace(stream)

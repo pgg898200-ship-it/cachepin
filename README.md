@@ -4,29 +4,32 @@
 
 [Open the browser explorer](https://huggingface.co/spaces/pgg-engineering/racecurve) · [Get the measured traces](https://huggingface.co/datasets/pgg-engineering/racecurve-hedge-traces)
 
-## Try it
+## Replay the sample
 
-Run the bundled trace with Python 3.10 or later. From a fresh checkout:
+Run the bundled trace with Python 3.10 or later.
 
 ```sh
-git clone --single-branch --branch racecurve https://github.com/pgg898200-ship-it/cachepin.git racecurve
+git clone --depth 1 --branch racecurve https://github.com/pgg898200-ship-it/cachepin.git racecurve
 cd racecurve
-python3 packaging/demo.py examples/loopback.csv
+python3 packaging/demo.py
 ```
 
-On the first 700 requests, Racecurve selects a **1,177 µs** backup delay. Replaying the next 300 with that setting launches 42 backups and misses zero deadlines. Primary-only misses 27. The trace comes from a controlled localhost workload.
+The demo chooses a **1,177 µs** delay on the first 700 requests. On the next 300, primary-only replay misses 27 deadlines. The chosen delay misses **0**, with **42 backups**. Replay keeps each attempt's measured service time fixed.
 
-To install the CLI in a virtual environment:
+To install the commands in a virtual environment and replay your own trace, run
 
 ```sh
 python3 -m pip install https://huggingface.co/spaces/pgg-engineering/racecurve/resolve/main/racecurve_tools-0.1.0-py3-none-any.whl
-racecurve-demo
 racecurve-demo your-paired-trace.csv --slo-us 6000 --budget-pct 25
 ```
 
 The 15 KB wheel includes the example and requires only the Python standard library at runtime. For complete pairs, use the CSV header `primary_us,backup_us` and put one logical request on each row. Preserve each pair, including shared slowdowns. Two independently sampled latency histograms lose that information.
 
 ## What happens on real requests?
+
+[![At 400 requests/s a backup cut 6 ms deadline misses from 10.1% to 1.3%. At 1,600 requests/s misses rose from 26.9% to 98.8%.](experiments/shared-slots/deadline-misses.png)](experiments/shared-slots/hedging-under-load.ipynb)
+
+Two replicas shared two worker slots and every launched copy ran to completion. Change the deadline and count misses across all 36,800 requests. [Run in Colab](https://colab.research.google.com/github/pgg898200-ship-it/cachepin/blob/racecurve/experiments/shared-slots/hedging-under-load.ipynb) · [Read the executed notebook](experiments/shared-slots/hedging-under-load.ipynb)
 
 | Experiment | Observed outcome |
 | --- | --- |
