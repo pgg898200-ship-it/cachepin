@@ -1,0 +1,53 @@
+{
+  "revision": "d55f3cfc456d1b7bc7db3a4b70fbf602ddc8647d",
+  "stops": [
+    "<|end_of_message|>",
+    "</tool_response>",
+    "<|im_end|>",
+    "</answer>"
+  ],
+  "results": [
+    {
+      "fixture": "openai-text",
+      "fixture_sha256": "335190c22fe076d24f7a5b8303f5b8648505da63878403bf242570a3cf71a2f8",
+      "byte_length": 1730,
+      "content_deltas": 300,
+      "first_visible_delta": {
+        "cutstream": 1,
+        "fixed_window": 5
+      },
+      "peak_withheld_bytes": {
+        "cutstream": 0,
+        "fixed_window": 17
+      }
+    },
+    {
+      "fixture": "azure-model-router.1",
+      "fixture_sha256": "8749f1def5069fc268dcb44d2fd4edc828d57881ae9d708de5261eea69ee68e9",
+      "byte_length": 19,
+      "content_deltas": 4,
+      "first_visible_delta": {
+        "cutstream": 1,
+        "fixed_window": 3
+      },
+      "peak_withheld_bytes": {
+        "cutstream": 0,
+        "fixed_window": 17
+      }
+    },
+    {
+      "fixture": "openai-refusal",
+      "fixture_sha256": "ac138fd1e0250ee6902bc5cd8b34d1ba6695cc6d2b0f742ab09da930f161d5a4",
+      "byte_length": 45,
+      "content_deltas": 11,
+      "first_visible_delta": {
+        "cutstream": 1,
+        "fixed_window": 5
+      },
+      "peak_withheld_bytes": {
+        "cutstream": 0,
+        "fixed_window": 17
+      }
+    }
+  ]
+}

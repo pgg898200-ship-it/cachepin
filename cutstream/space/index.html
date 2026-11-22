@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Replay cross-chunk stop-sequence matching and see which output bytes can reach a streaming client.">
+<title>Cutstream | Streaming stop sequences</title>
+<style>
+:root{color-scheme:light;--ink:#17271f;--paper:#f8f8f0;--muted:#4b5c53;--line:#c8cfc1;--green:#1b5637;--mint:#ddedb2;--honey:#f6d68a;--rose:#efc3ad;--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans','Segoe UI',system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--sans)}
+main{max-width:1020px;margin:auto;padding:30px 38px 48px}
+header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:22px}
+h1{font:650 clamp(44px,6vw,72px)/1.1 var(--sans);letter-spacing:-.065em;margin:0}
+h2{font-size:1.1rem;letter-spacing:-.03em;margin:0 0 8px}
+header p{color:var(--muted);font-size:1.05rem;max-width:65ch;margin:8px 0 0}
+label,summary{font-weight:600}
+select,button,textarea{font:inherit}
+select,button,textarea,summary{border-radius:5px}
+select,textarea{border:1px solid #a3ae9c;background:#fffefa;color:var(--ink)}
+select{padding:8px 32px 8px 10px}
+button{background:var(--ink);color:white;border:1px solid var(--ink);cursor:pointer;font-weight:600;padding:.5em 1em}
+button.light{color:var(--ink);background:#f5f6ee;border-color:#a9b39f}
+button:disabled{cursor:default;opacity:.45}
+:focus-visible{outline:3px solid #5285d5;outline-offset:3px}
+.controls,.nav,.rowtop{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.controls{justify-content:space-between;margin:0 0 10px}
+.small,footer{color:var(--muted);font-size:.9rem}
+.nav{margin:12px 0 18px}.nav output{font:14px var(--mono);margin-right:auto}
+.tape{padding:16px 18px;background:#e9eddf;border:1px solid var(--line);border-radius:9px;min-width:0}
+.tokens{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.token{padding:3px 6px;border-radius:3px;min-height:26px;border:1px solid #b2bba8;font:14px/20px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;background:#f9faf3}
+.current{background:var(--ink);color:white;border-color:var(--ink)}
+.future{opacity:.55}
+.boxes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.box{min-width:0;background:#fffefa;border:1px solid var(--line);border-radius:9px;padding:16px 18px}
+.box.feature{border-color:var(--green);box-shadow:inset 0 3px var(--green)}
+.number{font:600 clamp(28px,4vw,42px)/1 var(--mono);letter-spacing:-.075em;margin:8px 7px 8px 0}
+.rowtop{gap:1px;color:var(--muted);margin-bottom:10px}
+.rowtop .number{color:var(--ink)}
+.track{margin:0 0 9px;font:14px/1.8 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;min-height:42px;padding:5px;border:1px solid var(--line);background:#f4f6ed;border-radius:4px}
+.track span{padding:2px 0;box-decoration-break:clone;-webkit-box-decoration-break:clone}.clear{background:var(--mint)}.held{background:var(--honey)}.stop{background:var(--rose)}
+.legend{display:flex;flex-wrap:wrap;gap:18px;margin:12px 0 8px;font-size:.87rem}.legend span::before{content:"";display:inline-block;width:11px;height:11px;border:1px solid #9da28f;margin-right:6px;vertical-align:-1px}.legend .a::before{background:var(--mint)}.legend .b::before{background:var(--honey)}.legend .c::before{background:var(--rose)}
+.status{margin:12px 0 22px;min-height:1.5em}details{border-block:1px solid var(--line);padding:12px 0}summary{cursor:pointer}textarea{width:100%;min-height:98px;padding:7px 10px;font:14px/1.5 var(--mono)}.edit{padding:12px 0 0}.edit label{display:block;margin-bottom:6px}.err{color:#9d321c;font-size:.95rem}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.action{display:flex;gap:12px;align-items:center}
+footer{margin-top:16px;max-width:85ch}a{color:var(--green)}
+@media(max-width:620px){main{padding:20px 16px}.boxes{grid-template-columns:1fr}.box{padding:12px}.nav{gap:6px}.nav button{padding:.45em .7em}.controls{align-items:flex-start}.controls select{max-width:100%}.track{min-height:34px}.tape{padding:12px}}
+</style></head>
+<body><main>
+<header><h1>Cutstream</h1><p>Step through a streamed response and see exactly which bytes can reach the caller before a stop sequence completes.</p></header>
+<div class="controls"><label for="example">Choose a stream</label><select id="example"><option value="split">Stop split across chunks</option><option value="tie">Two stops end on the same byte</option><option value="binary">Binary delimiter</option><option value="eof">Incomplete stop at end of stream</option><option value="custom" hidden>Custom stream</option></select></div>
+<section class="tape" aria-label="Replay input"><h2>Incoming chunks</h2><div class="tokens" id="chunks"></div></section>
+<div class="nav"><output id="step" aria-live="polite"></output><button class="light" id="first">Reset</button><button class="light" id="back">Previous</button><button id="next">Next chunk</button></div>
+<div class="boxes">
+<section class="box feature"><h2>Cutstream</h2><div class="rowtop"><span class="number" id="exact-count"></span>bytes released</div><div class="track" id="exact-track"></div><div class="small" id="exact-held"></div></section>
+<section class="box"><h2>Fixed holdback</h2><div class="rowtop"><span class="number" id="fixed-count"></span>bytes released</div><div class="track" id="fixed-track"></div><div class="small" id="fixed-held"></div></section>
+</div>
+<div class="legend" aria-hidden="true"><span class="a">Released</span><span class="b">Held</span><span class="c">Matched stop</span></div>
+<p class="status" id="status" role="status"></p>
+<details><summary>Edit stop sequences and chunks</summary><div class="edit">
+<p class="small">Enter one item per line. Leave the stop list empty for passthrough. Text uses UTF-8. Use <code>\xNN</code> for a byte, <code>\n</code> for newline, or <code>\\</code> for a backslash. Displayed byte escapes preserve binary data.</p>
+<div class="boxes"><div><label for="stops">Stop sequences</label><textarea id="stops" spellcheck="false"></textarea></div><div><label for="input">Chunks</label><textarea id="input" spellcheck="false"></textarea></div></div>
+<div class="action"><button id="apply">Apply changes</button><p class="err" id="error" role="alert"></p></div></div></details>
+<footer>Independent JavaScript replay of the byte-stream contract. The fixed policy retains up to <i>longest stop length − 1</i> bytes after every chunk. On a match, both release through the start of the winning stop and discard the rest. <a href="https://github.com/pgg898200-ship-it/cachepin/tree/cutstream-v0.1/cutstream" target="_blank" rel="noopener">C++ library and benchmarks</a></footer>
+</main>
+<script>
+"use strict";
+const examples = {
+  split: {stops: "</tool>\n[[END_OF_MESSAGE]]", chunks: "The sky \nis blue.\n <\n/tool\n> ignored"},
+  tie: {stops: "ND\nEND\nEND", chunks: "result \nE\nN\nD trailing"},
+  binary: {stops: "\\x00\\xff", chunks: "AB\\x00\n\\x10C\n\\x00\n\\xffignored"},
+  eof: {stops: "</tool>\n[[END]]", chunks: "report \ncomplete\n </to"}
+};
+function parseBytes(text) {
+  const bytes = [], encoder = new TextEncoder();
+  for (let i = 0; i < text.length;) {
+    if (text[i] !== "\\") {
+      const end = text.indexOf("\\", i);
+      const part = text.slice(i, end < 0 ? text.length : end);
+      bytes.push(...encoder.encode(part)); i += part.length; continue;
+    }
+    const tag = text[++i];
+    if (tag === "x" && /^[\da-f]{2}$/i.test(text.slice(i + 1, i + 3))) {
+      bytes.push(parseInt(text.slice(i + 1, i + 3), 16)); i += 3; continue;
+    }
+    const escaped = {"n":10, "r":13, "t":9, "\\":92};
+    if (!Object.hasOwn(escaped, tag)) throw Error("Invalid escape. Try \\x00, \\n, \\r, \\t, or \\\\.");
+    bytes.push(escaped[tag]); i++;
+  }
+  return bytes;
+}
+function showBytes(bytes) {
+  return bytes.map(b => b === 92 ? "\\\\" : b >= 32 && b <= 126 ? String.fromCharCode(b) : "\\x" + b.toString(16).padStart(2, "0")).join("");
+}
+function sameAt(data, pos, pattern, n = pattern.length) {
+  if (pos < 0 || pos + n > data.length) return false;
+  for (let i = 0; i < n; i++) if (data[pos + i] !== pattern[i]) return false;
+  return true;
+}
+function replay(patterns, chunks) {
+  const live = patterns.map((bytes, id) => ({bytes, id})).filter(({bytes}) =>
+    !patterns.some(other => {
+      for (let end = other.length; end < bytes.length; end++)
+        if (sameAt(bytes, end - other.length, other)) return true;
+      return false;
+    })
+  );
+  const maxLength = Math.max(1, ...patterns.map(p => p.length));
+  const data = [], frames = [{size:0, exact:0, fixed:0, chunk:-1}];
+  for (const [chunk, bytes] of chunks.entries()) {
+    for (const b of bytes) {
+      data.push(b);
+      let winner = null;
+      for (const p of live) {
+        if ((!winner || p.bytes.length > winner.bytes.length) && sameAt(data, data.length - p.bytes.length, p.bytes)) winner = p;
+      }
+      if (winner) {
+        const start = data.length - winner.bytes.length;
+        frames.push({size:data.length, exact:start, fixed:start, chunk, winner});
+        return {data, frames};
+      }
+    }
+    let held = 0;
+    for (const p of live) {
+      for (let n = Math.min(p.bytes.length - 1, data.length); n > held; n--) {
+        if (sameAt(data, data.length - n, p.bytes, n)) {held = n; break;}
+      }
+    }
+    frames.push({size:data.length, exact:data.length - held, fixed:Math.max(0, data.length - maxLength + 1), chunk});
+  }
+  frames.push({size:data.length, exact:data.length, fixed:data.length, eof:true, chunk:chunks.length});
+  return {data, frames};
+}
+const el = id => document.getElementById(id);
+let model, stops, input, pos;
+function decodeLines(text, stop) {
+  if (stop && !text) return [];
+  if (text.length > 4096) throw Error("Keep each input field under 4,097 characters.");
+  const lines = text.split("\n");
+  if (lines.length > 32) throw Error("Use at most 32 lines per field.");
+  return lines.map((line, index) => {
+    const bytes = parseBytes(line);
+    if (stop && (!bytes.length || bytes.length > 128)) throw Error("Stop on line " + (index+1) + " must have 1–128 bytes.");
+    return bytes;
+  });
+}
+function load(index) {
+  const parsedStops = decodeLines(el("stops").value, true);
+  const parsedInput = decodeLines(el("input").value, false);
+  stops = parsedStops; input = parsedInput; model = replay(stops, input);
+  pos = Math.min(index, model.frames.length - 1); el("error").textContent = ""; render();
+}
+function preset(key) {
+  el("stops").value = examples[key].stops; el("input").value = examples[key].chunks; load(1);
+}
+function part(parent, klass, text) {
+  const span = document.createElement("span"); span.className=klass; span.textContent=text; parent.appendChild(span); return span;
+}
+function render() {
+  const f = model.frames[pos], last = pos === model.frames.length - 1;
+  el("step").textContent = f.eof ? "End of stream" : pos === 0 ? "Before the first chunk" : "Chunk " + (f.chunk+1) + " of " + input.length;
+  el("back").disabled = el("first").disabled = !pos; el("next").disabled = last;
+  el("next").textContent = !last && model.frames[pos+1].eof ? "Finish stream" : "Next chunk";
+  const tape = el("chunks"); tape.replaceChildren();
+  input.forEach((chunk,i) => part(tape, "token " + (i===f.chunk ? "current" : i>f.chunk ? "future" : ""), showBytes(chunk)||"∅"));
+  for (const name of ["exact","fixed"]) {
+    const visible = f[name], track = el(name+"-track"); track.replaceChildren();
+    el(name+"-count").textContent = visible;
+    part(track, "clear", showBytes(model.data.slice(0, visible)));
+    if (f.size > visible) part(track, f.winner ? "stop" : "held", showBytes(model.data.slice(visible, f.size)));
+    if (!f.size) part(track, "", "∅");
+    const held = f.winner ? 0 : f.size-visible;
+    el(name+"-held").textContent = held + (held===1 ? " byte held" : " bytes held") + (f.winner ? " · stopped" : f.eof ? " · finished" : "");
+  }
+  el("status").textContent = f.winner
+    ? "Stop #" + (f.winner.id+1) + " (“" + showBytes(f.winner.bytes) + "”) ended at byte " + f.size + ". Earliest end wins, then longest match, then dictionary order."
+    : f.eof ? "End of stream. Both policies released the remaining bytes."
+    : stops.length === 0 ? "No stop sequences. All bytes pass through."
+    : "Active stops: " + stops.map((p,i)=>"#"+(i+1)+" “"+showBytes(p)+"”").join(" · ");
+}
+el("example").onchange = () => preset(el("example").value);
+el("apply").onclick = () => {
+  try { load(0); el("example").value="custom"; }
+  catch(err) { el("error").textContent = err.message; }
+};
+el("first").onclick = ()=>{pos=0;render();}; el("next").onclick = ()=>{if(pos<model.frames.length-1)pos++;render();}; el("back").onclick = ()=>{if(pos>0)pos--;render();};
+preset("split");
+</script></body></html>
