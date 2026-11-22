@@ -26,3 +26,9 @@
 - [src/proxy.rs](src/proxy.rs): Multi-threaded HTTP/HTTPS/SSE reverse proxy with zero-buffering streaming, /health, /stats, /metrics, and /dashboard.
 - [src/mcp.rs](src/mcp.rs): Native stdio Model Context Protocol (MCP) JSON-RPC 2.0 server exposing 5 tools.
 - [src/ffi.rs](src/ffi.rs) & [python/cachepin/__init__.py](python/cachepin/__init__.py): Panic-safe C-ABI shared library (`libcachepin.so`) and zero-dependency Python ctypes SDK.
+
+## Distribution & Interactive Showcase
+
+- [site/index.html](site/index.html): Zero-dependency interactive benchmark explorer & multi-agent swarm cost simulator (GitHub Pages ready).
+- [server.json](server.json): Official Model Context Protocol (MCP) Registry server manifest.
+- [.claude-plugin/plugin.json](.claude-plugin/plugin.json) & [skills/cachepin/SKILL.md](skills/cachepin/SKILL.md): Native Claude Code plugin and skill package.

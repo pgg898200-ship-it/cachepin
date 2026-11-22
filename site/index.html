@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>cachepin — Lossless Multi-Agent LLM Prompt &amp; KV-Cache Compiler</title>
+  <meta name="description" content="Zero-dependency Rust + AVX2 multi-agent prompt-cache compiler, exact O(M^2 K) mixed-TTL DP breakpoint solver, TTFT single-flight coalescer, and Shadow-KV adaptive radix router." />
+  <style>
+    :root {
+      --bg: #07090d;
+      --panel: #0e131b;
+      --panel-2: #131a25;
+      --border: #1f2a3a;
+      --fg: #e7edf5;
+      --muted: #8b9bb4;
+      --accent: #38bdf8;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 600px at 50% -10%, rgba(56,189,248,0.12), transparent 60%), var(--bg);
+      color: var(--fg);
+      font-family: var(--sans);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 72px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); padding-bottom: 18px; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -0.02em; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .badge { font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px; }
+    .hero { padding: 44px 0 28px; }
+    h1 { margin: 0 0 14px; font-size: clamp(32px, 5vw, 52px); line-height: 1.08; letter-spacing: -0.03em; max-width: 880px; }
+    h1 span { color: var(--accent); }
+    .sub { color: var(--muted); font-size: 17px; max-width: 760px; margin: 0 0 26px; }
+    .cmd-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 34px; }
+    .cmd-box { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+    .cmd-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+    .cmd-code { font-family: var(--mono); font-size: 12.5px; color: var(--fg); overflow-x: auto; white-space: nowrap; }
+    .copy-btn { cursor: pointer; background: var(--panel-2); color: var(--accent); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-family: var(--mono); font-size: 11px; }
+    .copy-btn:hover { border-color: var(--accent); }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 36px; }
+    .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .kpi-val { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--fg); letter-spacing: -0.02em; }
+    .kpi-val.green { color: var(--green); }
+    .kpi-val.accent { color: var(--accent); }
+    .kpi-lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .tag { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); margin-top: 6px; }
+    section { margin-top: 40px; }
+    h2 { font-size: 22px; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .sec-desc { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .ctrl { display: flex; flex-direction: column; gap: 14px; }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+    .row-top { display: flex; justify-content: space-between; align-items: center; }
+    .val-pill { font-family: var(--mono); color: var(--fg); font-weight: 600; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    select { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-family: var(--mono); font-size: 13px; }
+    .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .toggle { display: flex; flex-direction: row; align-items: center; gap: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 12.5px; color: var(--fg); }
+    .toggle input { accent-color: var(--green); margin: 0; }
+    .bar-row { margin-bottom: 12px; }
+    .bar-head { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px; font-family: var(--mono); }
+    .bar-track { height: 12px; background: var(--panel-2); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+    .bar-fill { height: 100%; border-radius: 999px; transition: width 0.25s ease; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+    td.num, th.num { text-align: right; font-family: var(--mono); }
+    tr.winner { background: rgba(52, 211, 153, 0.08); }
+    tr.winner td { color: var(--fg); font-weight: 600; }
+    .pill-win { color: var(--green); font-family: var(--mono); font-size: 11px; }
+    .pill-reg { color: var(--red); font-family: var(--mono); font-size: 11px; }
+    footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><span class="dot"></span> cachepin <span style="color:var(--muted);font-weight:400;font-size:13px">v0.1.0</span></div>
+      <div class="badges">
+        <span class="badge">1.1 MB Binary</span>
+        <span class="badge">0 External Crates</span>
+        <span class="badge">AVX2 SIMD</span>
+        <span class="badge">100% Lossless</span>
+        <span class="badge">MIT / Apache-2.0</span>
+      </div>
+    </header>
+
+    <div class="hero">
+      <h1>Pin your prefix. Stop burning <span>15×–40×</span> on broken multi-agent LLM caches.</h1>
+      <p class="sub">
+        Zero-dependency Rust + AVX2 multi-agent prompt-cache compiler, exact O(M²K) mixed-TTL breakpoint solver,
+        TTFT-triggered single-flight thundering-herd coalescer, and Shadow-KV adaptive radix router.
+        Works across Anthropic, OpenAI, vLLM, SGLang, Claude Code, and MCP.
+      </p>
+
+      <div class="cmd-strip">
+        <div class="cmd-box">
+          <div class="cmd-label"><span>1. Audit Your Real Claude Code Logs</span><button class="copy-btn" data-copy="cachepin audit --claude-code">Copy</button></div>
+          <div class="cmd-code">cachepin audit --claude-code</div>
+        </div>
+        <div class="cmd-box">
+          <div class="cmd-label"><span>2. Drop-In Cloud / vLLM Reverse Proxy</span><button class="copy-btn" data-copy="cachepin proxy --upstream https://api.anthropic.com --port 47820">Copy</button></div>
+          <div class="cmd-code">cachepin proxy --upstream https://api.anthropic.com --port 47820</div>
+        </div>
+        <div class="cmd-box">
+          <div class="cmd-label"><span>3. Native Stdio MCP Server (5 Tools)</span><button class="copy-btn" data-copy="cachepin mcp">Copy</button></div>
+          <div class="cmd-code">cachepin mcp</div>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi-val accent">44.55 GB/s</div>
+          <div class="kpi-lbl">AVX2 prefix diff (52× vs Node 22)</div>
+          <span class="tag">[LIVE-CPU]</span>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val">195.3 µs</div>
+          <div class="kpi-lbl">18.5 KiB compile P50 (9.6× vs Python)</div>
+          <span class="tag">[LIVE-CPU]</span>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val green">32 → 1</div>
+          <div class="kpi-lbl">Cold thundering-herd writes (-96.9%)</div>
+          <span class="tag">[LIVE-CPU]</span>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val green">15.37×</div>
+          <div class="kpi-lbl">32-agent coding swarm cost reduction</div>
+          <span class="tag">[SIM-TRACE]</span>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val accent">1.15 µs</div>
+          <div class="kpi-lbl">8-GPU Shadow-KV route P50 (-37% P99)</div>
+          <span class="tag">[LIVE-CPU]</span>
+        </div>
+      </div>
+    </div>
+
+    <section>
+      <h2>Interactive Multi-Agent Swarm Billing Simulator</h2>
+      <p class="sec-desc">Compute exact late-2026 provider economics using cachepin's pricing model (input, 5m/1h writes, 0.025×–0.05× cache reads, and cold-start thundering herds).</p>
+      <div class="grid-2">
+        <div class="card ctrl">
+          <label>
+            <span>Model &amp; Provider Cache Economics</span>
+            <select id="model">
+              <option value="opus55">Claude Opus 5.5 ($4.00 in / $5.00 5m / $0.20 hit · 0.05×)</option>
+              <option value="sonnet55">Claude Sonnet 5.5 ($2.00 in / $2.50 5m / $0.10 hit · 0.05×)</option>
+              <option value="fable51">Claude Fable 5.1 ($3.00 in / $3.75 5m / $0.075 hit · 0.025×)</option>
+              <option value="gpt56">OpenAI GPT-5.6 ($2.50 in / $3.125 write / $0.125 hit · 0.05×)</option>
+            </select>
+          </label>
+          <label>
+            <div class="row-top"><span>Concurrent Agents in Swarm</span><span class="val-pill" id="v-agents">32 agents</span></div>
+            <input id="agents" type="range" min="4" max="128" step="4" value="32" />
+          </label>
+          <label>
+            <div class="row-top"><span>Shared Prefix Length (Tools + System + Shared Repo Docs)</span><span class="val-pill" id="v-prefix">32,000 tokens</span></div>
+            <input id="prefix" type="range" min="4000" max="128000" step="4000" value="32000" />
+          </label>
+          <label>
+            <div class="row-top"><span>Turns per Agent (per Swarm Run)</span><span class="val-pill" id="v-turns">8 turns</span></div>
+            <input id="turns" type="range" min="2" max="30" step="1" value="8" />
+          </label>
+          <label>
+            <span>Active Cache-Busting Failure Modes</span>
+            <div class="toggles">
+              <label class="toggle"><input id="f-drift" type="checkbox" checked /> Tool / JSON Key Drift</label>
+              <label class="toggle"><input id="f-vol" type="checkbox" checked /> Timestamps / UUIDs</label>
+              <label class="toggle"><input id="f-ag" type="checkbox" checked /> All-Gather Doc Order</label>
+              <label class="toggle"><input id="f-herd" type="checkbox" checked /> Cold Thundering Herd</label>
+            </div>
+          </label>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px">
+            <div>
+              <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Per-Run Cost Reduction</div>
+              <div id="out-mult" style="font-family:var(--mono);font-size:34px;font-weight:700;color:var(--green)">15.4× cheaper</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:12px;color:var(--muted)">Saved per 100 runs</div>
+              <div id="out-save100" style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent)">$3,780</div>
+            </div>
+          </div>
+
+          <div class="bar-row">
+            <div class="bar-head"><span>Raw Un-Canonicalized Swarm</span><span id="out-raw" style="color:var(--red)">$40.50</span></div>
+            <div class="bar-track"><div id="bar-raw" class="bar-fill" style="width:100%;background:var(--red)"></div></div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-head"><span>After cachepin (100% Lossless)</span><span id="out-opt" style="color:var(--green)">$2.65</span></div>
+            <div class="bar-track"><div id="bar-opt" class="bar-fill" style="width:7%;background:var(--green)"></div></div>
+          </div>
+
+          <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12.5px">
+            <div>
+              <div style="color:var(--muted)">Estimated Cache Hit Rate</div>
+              <div id="out-hits" style="font-family:var(--mono);font-size:15px;margin-top:2px">2.5% → 97.6%</div>
+            </div>
+            <div>
+              <div style="color:var(--muted)">Cold-Start Cache Writes</div>
+              <div id="out-writes" style="font-family:var(--mono);font-size:15px;margin-top:2px">32 → 1 writes</div>
+            </div>
+          </div>
+          <p style="margin:16px 0 0;font-size:12px;color:var(--muted)">
+            Assumes 512 fresh uncached tokens/turn per agent. All numbers reproduce analytically from <code>src/pricing.rs</code>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>8-GPU vLLM Eviction-Regime Routing <span class="tag">[SIM-TRACE]</span></h2>
+      <p class="sec-desc">48 shared prefixes across 8 GPUs (20,480 KV tokens/GPU, Zipf-1.25 multi-agent bursts, 160 ms decode residency). Single-home 2×-divert regresses P99 TTFT by +9.8% vs Least-Loaded; cachepin cuts P99 by 37.0% and Mean TTFT by 2.42× at 1.15 µs/route.</p>
+      <div class="card" style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Routing Policy</th>
+              <th class="num">Fleet KV Hit</th>
+              <th class="num">P50 TTFT</th>
+              <th class="num">P99 TTFT</th>
+              <th class="num">Mean TTFT</th>
+              <th class="num">Replications</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Round-Robin</td><td class="num">51.1%</td><td class="num">136.6 ms</td><td class="num">443.0 ms</td><td class="num">137.3 ms</td><td class="num">366</td><td><span class="pill-reg">KV thrashing</span></td></tr>
+            <tr><td>Least-Loaded</td><td class="num">52.6%</td><td class="num">106.0 ms</td><td class="num">376.0 ms</td><td class="num">119.1 ms</td><td class="num">355</td><td><span class="pill-reg">Cache-blind</span></td></tr>
+            <tr><td>Consistent-Hash</td><td class="num">96.1%</td><td class="num">16.8 ms</td><td class="num">351.6 ms</td><td class="num">72.9 ms</td><td class="num">0</td><td><span class="pill-reg">Hot-GPU queue</span></td></tr>
+            <tr><td>SingleHome-2xDivert (Ranvier-style)</td><td class="num">66.9%</td><td class="num">14.4 ms</td><td class="num">413.0 ms</td><td class="num">89.7 ms</td><td class="num">180</td><td><span class="pill-reg">+9.8% P99 cliff</span></td></tr>
+            <tr class="winner"><td>cachepin Adaptive-Replication</td><td class="num">87.5%</td><td class="num">12.8 ms</td><td class="num">260.0 ms</td><td class="num">37.1 ms</td><td class="num">66</td><td><span class="pill-win">-37.0% P99 · 1.15 µs</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Reproducible Cross-Language Controls <span class="tag">[LIVE-CPU]</span></h2>
+      <p class="sec-desc">Measured on identical 18.5 KiB multi-agent payloads (`benchmarks/compare_controls.py` → `benchmarks/results.json`). Verify locally with <code>./scripts/verify.sh</code> (55 Rust unit/property tests + 10 adversarial red-team vectors).</p>
+      <div class="card" style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Runtime</th>
+              <th class="num">Compile P50</th>
+              <th class="num">Compile P99</th>
+              <th class="num">LCP Diff GB/s</th>
+              <th class="num">CLI Cold Start</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="winner"><td>cachepin (Rust + AVX2)</td><td class="num">195.3 µs</td><td class="num">260.1 µs</td><td class="num">44.55 GB/s</td><td class="num">2.55 ms</td></tr>
+            <tr><td>cachepin Python FFI (libcachepin.so)</td><td class="num">636.2 µs</td><td class="num">1,606.8 µs</td><td class="num">39.17 GB/s</td><td class="num">—</td></tr>
+            <tr><td>Node.js 22 (V8 JIT control)</td><td class="num">282.2 µs</td><td class="num">628.9 µs</td><td class="num">0.86 GB/s</td><td class="num">56.63 ms</td></tr>
+            <tr><td>Python 3.12 (stdlib control)</td><td class="num">1,869.2 µs</td><td class="num">2,107.3 µs</td><td class="num">0.02 GB/s</td><td class="num">36.31 ms</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <div>Zero external crates · Zero telemetry · 100% lossless bijection</div>
+      <div>Reproduce every number: <code>./scripts/verify.sh</code> · Dual-licensed MIT / Apache-2.0</div>
+    </footer>
+  </div>
+
+  <script>
+    const MODELS = {
+      opus55:   { inP: 4.0, w5: 5.0,   hit: 0.20  },
+      sonnet55: { inP: 2.0, w5: 2.5,   hit: 0.10  },
+      fable51:  { inP: 3.0, w5: 3.75,  hit: 0.075 },
+      gpt56:    { inP: 2.5, w5: 3.125, hit: 0.125 }
+    };
+
+    function fmtUsd(v) {
+      return v >= 100 ? "$" + v.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "$" + v.toFixed(2);
+    }
+
+    function update() {
+      const m = MODELS[document.getElementById("model").value];
+      const agents = Number(document.getElementById("agents").value);
+      const prefix = Number(document.getElementById("prefix").value);
+      const turns  = Number(document.getElementById("turns").value);
+      const drift  = document.getElementById("f-drift").checked;
+      const vol    = document.getElementById("f-vol").checked;
+      const ag     = document.getElementById("f-ag").checked;
+      const herd   = document.getElementById("f-herd").checked;
+
+      document.getElementById("v-agents").textContent = agents + " agents";
+      document.getElementById("v-prefix").textContent = prefix.toLocaleString() + " tokens";
+      document.getElementById("v-turns").textContent  = turns + " turns";
+
+      const totalReqs = agents * turns;
+      const tailTok = 512;
+
+      // Raw cache hit fraction under active failure modes
+      let rawHitFrac = 0.94;
+      if (drift) rawHitFrac *= 0.08;
+      if (vol)   rawHitFrac *= 0.20;
+      if (ag)    rawHitFrac *= 0.35;
+      const rawColdWrites = herd ? agents : 1;
+      const rawWarmReqs = Math.max(0, totalReqs - rawColdWrites);
+
+      const rawWriteTok = rawColdWrites * prefix + rawWarmReqs * prefix * (1 - rawHitFrac);
+      const rawHitTok   = rawWarmReqs * prefix * rawHitFrac;
+      const rawTailTok  = totalReqs * tailTok;
+      const rawCost = (rawWriteTok * m.w5 + rawHitTok * m.hit + rawTailTok * m.inP) / 1e6;
+
+      // After cachepin: 1 cold leader write, remaining N*T - 1 requests hit shared prefix losslessly
+      const optWriteTok = prefix;
+      const optHitTok   = Math.max(0, totalReqs - 1) * prefix;
+      const optTailTok  = totalReqs * tailTok;
+      const optCost = (optWriteTok * m.w5 + optHitTok * m.hit + optTailTok * m.inP) / 1e6;
+
+      const totalTok = totalReqs * (prefix + tailTok);
+      const rawHitPct = (rawHitTok / totalTok) * 100;
+      const optHitPct = (optHitTok / totalTok) * 100;
+      const mult = rawCost / Math.max(optCost, 1e-9);
+      const saved100 = Math.max(0, rawCost - optCost) * 100;
+
+      document.getElementById("out-raw").textContent = fmtUsd(rawCost);
+      document.getElementById("out-opt").textContent = fmtUsd(optCost);
+      document.getElementById("out-mult").textContent = mult.toFixed(1) + "× cheaper";
+      document.getElementById("out-save100").textContent = fmtUsd(saved100);
+      document.getElementById("out-hits").textContent = rawHitPct.toFixed(1) + "% → " + optHitPct.toFixed(1) + "%";
+      document.getElementById("out-writes").textContent = rawColdWrites + " → 1 writes";
+      document.getElementById("bar-opt").style.width = Math.max(2, (optCost / Math.max(rawCost, 1e-9)) * 100).toFixed(1) + "%";
+    }
+
+    ["model", "agents", "prefix", "turns", "f-drift", "f-vol", "f-ag", "f-herd"].forEach(id => {
+      document.getElementById(id).addEventListener("input", update);
+      document.getElementById(id).addEventListener("change", update);
+    });
+    document.querySelectorAll(".copy-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        navigator.clipboard?.writeText(btn.dataset.copy).catch(() => {});
+        const orig = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = orig; }, 1200);
+      });
+    });
+    update();
+  </script>
+</body>
+</html>

@@ -59,9 +59,10 @@ COMMANDS:
   version    Print version and active SIMD backend ({})
 
 EXAMPLES:
+  cachepin audit --claude-code
+  cachepin audit ./swarm_trace.jsonl --json
   cachepin proxy --upstream http://127.0.0.1:8000 --port 47820
   cachepin proxy --backends http://gpu1:8000,http://gpu2:8000 --kv-tokens 131072
-  cachepin audit ./swarm_trace.jsonl --json
   cat request.json | cachepin optimize --mode swarm
   cachepin bench --json
   cachepin mcp"#,
@@ -171,9 +172,15 @@ fn cmd_audit(args: &[String]) -> Result<(), String> {
                     args.get(i).ok_or("--provider requires value")?,
                 ));
             }
+            "--claude-code" => {
+                let home = std::env::var("HOME")
+                    .or_else(|_| std::env::var("USERPROFILE"))
+                    .map_err(|_| "cannot resolve HOME directory for --claude-code")?;
+                path = Some(PathBuf::from(home).join(".claude").join("projects"));
+            }
             "--json" => as_json = true,
             "-h" | "--help" => {
-                println!("Usage: cachepin audit <trace.jsonl> [--mode json|hoist|swarm] [--provider anthropic|openai|vllm] [--json]");
+                println!("Usage: cachepin audit (<trace.jsonl|dir> | --claude-code) [--mode json|hoist|swarm] [--provider anthropic|openai|vllm] [--json]");
                 return Ok(());
             }
             p if !p.starts_with('-') => path = Some(PathBuf::from(p)),
@@ -181,7 +188,7 @@ fn cmd_audit(args: &[String]) -> Result<(), String> {
         }
         i += 1;
     }
-    let trace_path = path.ok_or("missing <trace.jsonl> path. Run `cachepin audit --help`.")?;
+    let trace_path = path.ok_or("missing <trace.jsonl|dir> path or --claude-code. Run `cachepin audit --help`.")?;
     let report = audit_jsonl_file(&trace_path, mode, provider)?;
     if as_json {
         println!("{}", report.to_json_string());

@@ -1,0 +1,19 @@
+{
+  "name": "cachepin-marketplace",
+  "owner": {
+    "name": "CachePin Contributors"
+  },
+  "metadata": {
+    "description": "Official distribution channel for cachepin — zero-dependency Rust + AVX2 lossless multi-agent prompt/KV-cache optimizer."
+  },
+  "plugins": [
+    {
+      "name": "cachepin",
+      "source": "./",
+      "description": "Diagnose ~/.claude/projects cache waste, canonicalize multi-agent prefixes losslessly, solve exact 1h/5m breakpoints, coalesce cold swarm herds, and route vLLM/SGLang clusters.",
+      "version": "0.1.0",
+      "category": "performance",
+      "tags": ["prompt-cache", "kv-cache", "multi-agent", "mcp", "vllm"]
+    }
+  ]
+}

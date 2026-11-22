@@ -27,7 +27,8 @@ description: Diagnose, canonicalize, coalesce, and optimize multi-agent LLM prom
 | Goal | Command / API |
 |---|---|
 | Build offline (0 external crates) | `cargo build --release` |
-| Audit a JSONL request trace for misses & USD waste | `./target/release/cachepin audit <trace.jsonl> --json` |
+| Audit local Claude Code sessions (`~/.claude/projects`) | `./target/release/cachepin audit --claude-code` |
+| Audit a JSONL request trace or directory | `./target/release/cachepin audit <trace.jsonl\|dir> --json` |
 | Optimize a single request JSON (stdin/file) | `cat req.json \| ./target/release/cachepin optimize --mode swarm` |
 | Start cloud API proxy (Anthropic / OpenAI) | `./target/release/cachepin proxy --upstream https://api.anthropic.com --port 47820` |
 | Start multi-GPU vLLM/SGLang adaptive router | `./target/release/cachepin proxy --backends http://g0:8000,http://g1:8000 --kv-tokens 131072 --policy adaptive` |

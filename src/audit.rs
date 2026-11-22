@@ -204,19 +204,78 @@ fn escape_json_str(s: &str) -> String {
     out
 }
 
-/// Audit a JSONL trace file on disk.
+/// Audit a JSONL trace file OR recursively scan a directory of `.jsonl` files
+/// (including native Claude Code `~/.claude/projects/` session transcripts).
 pub fn audit_jsonl_file(
     path: &Path,
     mode: CanonicalMode,
     provider_hint: Option<ProviderFormat>,
 ) -> Result<AuditReport, String> {
+    if path.is_dir() {
+        let mut files = Vec::new();
+        collect_jsonl_files(path, &mut files, 0)?;
+        if files.is_empty() {
+            return Err(format!("no .jsonl files found under {}", path.display()));
+        }
+        files.sort();
+        return audit_jsonl_files(&files, mode, provider_hint);
+    }
     let file = File::open(path).map_err(|e| format!("failed to open {}: {}", path.display(), e))?;
     let reader = BufReader::with_capacity(256 * 1024, file);
     audit_jsonl_reader(reader, mode, provider_hint)
 }
 
-/// Audit any streaming `BufRead` containing newline-delimited LLM request payloads
-/// or trace wrapper objects `{"timestamp_ms":..., "tenant":..., "request": {...}}`.
+fn collect_jsonl_files(
+    dir: &Path,
+    out: &mut Vec<std::path::PathBuf>,
+    depth: usize,
+) -> Result<(), String> {
+    if depth > 8 || out.len() >= 4096 {
+        return Ok(());
+    }
+    let rd = std::fs::read_dir(dir)
+        .map_err(|e| format!("failed to read directory {}: {}", dir.display(), e))?;
+    for entry_res in rd {
+        let Ok(entry) = entry_res else { continue };
+        let Ok(ft) = entry.file_type() else { continue };
+        if ft.is_symlink() {
+            continue;
+        }
+        let p = entry.path();
+        if ft.is_dir() {
+            collect_jsonl_files(&p, out, depth + 1)?;
+        } else if ft.is_file() {
+            if p.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                out.push(p);
+                if out.len() >= 4096 {
+                    break;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn audit_jsonl_files(
+    files: &[std::path::PathBuf],
+    mode: CanonicalMode,
+    provider_hint: Option<ProviderFormat>,
+) -> Result<AuditReport, String> {
+    let mut combined = Vec::new();
+    for p in files {
+        if let Ok(bytes) = std::fs::read(p) {
+            combined.extend_from_slice(&bytes);
+            if !combined.ends_with(b"\n") {
+                combined.push(b'\n');
+            }
+        }
+    }
+    audit_jsonl_reader(BufReader::new(combined.as_slice()), mode, provider_hint)
+}
+
+/// Audit any streaming `BufRead` containing newline-delimited LLM request payloads,
+/// trace wrapper objects `{"timestamp_ms":..., "tenant":..., "request": {...}}`,
+/// OR native Claude Code session transcripts (`~/.claude/projects/*/*.jsonl`).
 pub fn audit_jsonl_reader<R: BufRead>(
     reader: R,
     mode: CanonicalMode,
@@ -252,6 +311,10 @@ pub fn audit_jsonl_reader<R: BufRead>(
     let mut miss_wasted_usd: HashMap<String, f64> = HashMap::new();
     let mut top_misses: Vec<TopMissRecord> = Vec::new();
 
+    // Per-session state for native Claude Code transcript billing forensics:
+    // session_id -> (last_ts_ms, prev_cached_prefix_tokens, turn_count)
+    let mut cc_sessions: HashMap<String, (u64, u64, usize)> = HashMap::new();
+
     let mut synthetic_clock_ms: u64 = 1_700_000_000_000;
     let tenant_secret = CompilerConfig::default().tenant_secret;
 
@@ -270,11 +333,130 @@ pub fn audit_jsonl_reader<R: BufRead>(
             continue;
         }
 
-        // Unwrap optional envelope `{"timestamp_ms": ..., "tenant": ..., "request": {...}}`
-        let (tenant_id, ts_ms, payload_bytes) = match extract_envelope(trimmed.as_bytes(), synthetic_clock_ms) {
-            Some(v) => v,
+        // Auto-detect raw API request, wrapper envelope, or native Claude Code session transcript.
+        let record = match decode_audit_record(trimmed.as_bytes(), synthetic_clock_ms) {
+            Some(r) => r,
             None => {
                 lines_skipped += 1;
+                continue;
+            }
+        };
+
+        let (tenant_id, ts_ms, payload_bytes) = match record {
+            AuditRecord::Request {
+                tenant,
+                ts_ms,
+                payload,
+            } => (tenant, ts_ms, payload),
+            AuditRecord::ClaudeCodeTurn {
+                session_id,
+                model,
+                ts_ms,
+                input_tokens,
+                cache_creation_tokens,
+                cache_read_tokens,
+            } => {
+                synthetic_clock_ms = ts_ms.max(synthetic_clock_ms) + 2_000;
+                let turn_total = input_tokens
+                    .saturating_add(cache_creation_tokens)
+                    .saturating_add(cache_read_tokens);
+                if turn_total == 0 {
+                    lines_skipped += 1;
+                    continue;
+                }
+                requests_analyzed += 1;
+                let pricing = lookup_pricing(&model, ProviderFormat::AnthropicMessages);
+                let raw_cost = pricing.cost_input(input_tokens)
+                    + pricing.cost_write(cache_creation_tokens, crate::types::CacheTtl::FiveMin)
+                    + pricing.cost_read(cache_read_tokens);
+
+                let (prev_ts, prev_prefix, prev_turns) = cc_sessions
+                    .get(&session_id)
+                    .copied()
+                    .unwrap_or((0, 0, 0));
+                let gap_secs = if prev_turns > 0 && ts_ms >= prev_ts {
+                    (ts_ms - prev_ts) / 1000
+                } else {
+                    0
+                };
+
+                // Classify billing event:
+                // - ColdStart: first turn of session
+                // - TtlExpired: inter-turn gap > 300s with cache rewrite spike (>= 512 tokens)
+                // - PrefixMutation: inter-turn gap <= 300s yet cache_creation spiked and cache_read dropped
+                // - CacheHit: steady incremental growth / cache reuse
+                let (reason, recoverable_tokens, advice) = if prev_turns == 0 {
+                    (
+                        MissReason::ColdStart,
+                        0u64,
+                        "Initial session turn warmed the prompt cache.".to_string(),
+                    )
+                } else if gap_secs > 300 && cache_creation_tokens >= pricing.min_cache_tokens as u64 {
+                    let rec = cache_creation_tokens.min(prev_prefix.max(cache_creation_tokens));
+                    (
+                        MissReason::TtlExpired,
+                        rec,
+                        format!(
+                            "5m cache TTL expired after {}s gap ({} tokens rewritten); enable 1h DP tier or 270s keepalive.",
+                            gap_secs, cache_creation_tokens
+                        ),
+                    )
+                } else if cache_creation_tokens >= pricing.min_cache_tokens as u64
+                    && prev_prefix >= pricing.min_cache_tokens as u64
+                    && cache_read_tokens * 10 < prev_prefix * 7
+                {
+                    let rec = cache_creation_tokens.min(prev_prefix);
+                    (
+                        MissReason::PrefixMutation,
+                        rec,
+                        format!(
+                            "Mid-session cache break ({}s after prior turn: cache_read dropped {} -> {}, {} rewritten); proxy through `cachepin proxy` to freeze tool/key/volatile drift.",
+                            gap_secs, prev_prefix, cache_read_tokens, cache_creation_tokens
+                        ),
+                    )
+                } else {
+                    (
+                        MissReason::CacheHit,
+                        0u64,
+                        "Warm prefix hit maintained.".to_string(),
+                    )
+                };
+
+                let wasted_usd = if recoverable_tokens > 0 {
+                    (pricing.cost_write(recoverable_tokens, crate::types::CacheTtl::FiveMin)
+                        - pricing.cost_read(recoverable_tokens))
+                    .max(0.0)
+                } else {
+                    0.0
+                };
+                let opt_hit = cache_read_tokens.saturating_add(recoverable_tokens).min(turn_total);
+                let opt_cost = (raw_cost - wasted_usd).max(0.0);
+
+                total_input_tokens += turn_total;
+                raw_cached_tokens += cache_read_tokens;
+                raw_est_cost_usd += raw_cost;
+                opt_cached_tokens += opt_hit;
+                opt_est_cost_usd += opt_cost;
+
+                let reason_key = reason.as_str().to_string();
+                *miss_counts.entry(reason_key.clone()).or_insert(0) += 1;
+                if reason != MissReason::CacheHit {
+                    *miss_wasted_usd.entry(reason_key).or_insert(0.0) += wasted_usd;
+                    if wasted_usd > 0.0 {
+                        top_misses.push(TopMissRecord {
+                            line_number: idx + 1,
+                            model: model.clone(),
+                            reason,
+                            divergence_path: Some(format!("session:{}", session_id)),
+                            divergence_byte_offset: None,
+                            wasted_usd,
+                            advice,
+                        });
+                    }
+                }
+
+                let active_prefix = cache_read_tokens.saturating_add(cache_creation_tokens);
+                cc_sessions.insert(session_id, (ts_ms, active_prefix, prev_turns + 1));
                 continue;
             }
         };
@@ -447,24 +629,86 @@ pub fn audit_jsonl_reader<R: BufRead>(
     })
 }
 
-fn extract_envelope(line: &[u8], default_ts: u64) -> Option<(String, u64, Vec<u8>)> {
+enum AuditRecord {
+    Request {
+        tenant: String,
+        ts_ms: u64,
+        payload: Vec<u8>,
+    },
+    ClaudeCodeTurn {
+        session_id: String,
+        model: String,
+        ts_ms: u64,
+        input_tokens: u64,
+        cache_creation_tokens: u64,
+        cache_read_tokens: u64,
+    },
+}
+
+fn decode_audit_record(line: &[u8], default_ts: u64) -> Option<AuditRecord> {
     let val = parse_json(line).ok()?;
-    // Support wrapper format `{"timestamp_ms":..., "tenant":..., "request": {...}}`
+    // 1. Wrapper format `{"timestamp_ms":..., "tenant":..., "request": {...}}`
     if let Some(req) = val.get("request") {
         let tenant = val
             .get("tenant")
             .and_then(|v| v.as_str())
             .unwrap_or("default")
             .to_string();
-        let ts = val
+        let ts_ms = val
             .get("timestamp_ms")
             .and_then(|v| v.as_u64())
             .unwrap_or(default_ts);
         let mut buf = Vec::new();
         crate::json::serialize_json(req, &mut buf);
-        return Some((tenant, ts, buf));
+        return Some(AuditRecord::Request {
+            tenant,
+            ts_ms,
+            payload: buf,
+        });
     }
-    // Direct Anthropic/OpenAI request JSON
+    // 2. Native Claude Code local session transcript (`~/.claude/projects/*/*.jsonl`)
+    //    Format: {"type":"assistant","timestamp":"2026-...Z","sessionId":"...","message":{"model":"...","usage":{...}}}
+    if let Some(msg) = val.get("message") {
+        if let Some(usage) = msg.get("usage") {
+            let input_tokens = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let cache_creation_tokens = usage
+                .get("cache_creation_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cache_read_tokens = usage
+                .get("cache_read_input_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            if input_tokens + cache_creation_tokens + cache_read_tokens > 0 {
+                let model = msg
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("claude-sonnet-5-5")
+                    .to_string();
+                let session_id = val
+                    .get("sessionId")
+                    .or_else(|| val.get("session_id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("default")
+                    .to_string();
+                let ts_ms = val
+                    .get("timestamp")
+                    .and_then(|v| v.as_str())
+                    .and_then(parse_iso8601_epoch_ms)
+                    .or_else(|| val.get("timestamp_ms").and_then(|v| v.as_u64()))
+                    .unwrap_or(default_ts);
+                return Some(AuditRecord::ClaudeCodeTurn {
+                    session_id,
+                    model,
+                    ts_ms,
+                    input_tokens,
+                    cache_creation_tokens,
+                    cache_read_tokens,
+                });
+            }
+        }
+    }
+    // 3. Direct Anthropic/OpenAI request JSON
     if val.get("messages").is_some() || val.get("input").is_some() || val.get("system").is_some() {
         let tenant = val
             .get("user")
@@ -472,7 +716,75 @@ fn extract_envelope(line: &[u8], default_ts: u64) -> Option<(String, u64, Vec<u8
             .and_then(|v| v.as_str())
             .unwrap_or("default")
             .to_string();
-        return Some((tenant, default_ts, line.to_vec()));
+        return Some(AuditRecord::Request {
+            tenant,
+            ts_ms: default_ts,
+            payload: line.to_vec(),
+        });
     }
     None
+}
+
+/// Pure-Rust ISO-8601 UTC timestamp parser (`YYYY-MM-DDTHH:MM:SS[.sss]Z`) -> epoch ms.
+fn parse_iso8601_epoch_ms(s: &str) -> Option<u64> {
+    let b = s.as_bytes();
+    if b.len() < 19 || b[4] != b'-' || b[7] != b'-' || b[13] != b':' || b[16] != b':' {
+        return None;
+    }
+    let y: i64 = s[0..4].parse().ok()?;
+    let m: i64 = s[5..7].parse().ok()?;
+    let d: i64 = s[8..10].parse().ok()?;
+    let hh: i64 = s[11..13].parse().ok()?;
+    let mm: i64 = s[14..16].parse().ok()?;
+    let ss: i64 = s[17..19].parse().ok()?;
+    if !(1970..=2200).contains(&y) || !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    // Howard Hinnant's civil-from-days inverse (exact Gregorian days since 1970-01-01)
+    let y_adj = y - if m <= 2 { 1 } else { 0 };
+    let era = if y_adj >= 0 { y_adj } else { y_adj - 399 } / 400;
+    let yoe = y_adj - era * 400;
+    let mp = m + if m > 2 { -3 } else { 9 };
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    let secs = days * 86_400 + hh * 3_600 + mm * 60 + ss;
+    u64::try_from(secs).ok().map(|v| v * 1000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_claude_code_transcript_ttl_expiry_and_mid_session_break() {
+        let trace = concat!(
+            "{\"type\":\"user\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-11-22T10:00:00Z\",\"message\":{\"role\":\"user\",\"content\":\"start\"}}\n",
+            "{\"type\":\"assistant\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-11-22T10:00:02Z\",\"message\":{\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":50,\"cache_creation_input_tokens\":40000,\"cache_read_input_tokens\":0}}}\n",
+            "{\"type\":\"assistant\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-11-22T10:00:30Z\",\"message\":{\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":80,\"cache_creation_input_tokens\":200,\"cache_read_input_tokens\":40000}}}\n",
+            "{\"type\":\"assistant\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-11-22T10:01:00Z\",\"message\":{\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":60,\"cache_creation_input_tokens\":40500,\"cache_read_input_tokens\":0}}}\n",
+            "{\"type\":\"assistant\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-11-22T10:08:30Z\",\"message\":{\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":70,\"cache_creation_input_tokens\":41000,\"cache_read_input_tokens\":0}}}\n"
+        );
+        let rep = audit_jsonl_reader(
+            BufReader::new(trace.as_bytes()),
+            CanonicalMode::SwarmAlign,
+            None,
+        )
+        .expect("audit claude code transcript");
+
+        assert_eq!(rep.requests_analyzed, 4);
+        assert_eq!(rep.miss_counts.get("cold_start").copied(), Some(1));
+        assert_eq!(rep.miss_counts.get("cache_hit").copied(), Some(1));
+        assert_eq!(rep.miss_counts.get("prefix_mutation").copied(), Some(1));
+        assert_eq!(rep.miss_counts.get("ttl_expired").copied(), Some(1));
+        assert!(rep.opt_hit_rate_pct > rep.raw_hit_rate_pct + 40.0);
+        assert!(rep.saved_usd > 0.30);
+    }
+
+    #[test]
+    fn test_iso8601_parser_gap_accuracy() {
+        let t1 = parse_iso8601_epoch_ms("2026-11-22T10:00:00Z").expect("t1");
+        let t2 = parse_iso8601_epoch_ms("2026-11-22T10:06:00Z").expect("t2");
+        assert_eq!((t2 - t1) / 1000, 360);
+    }
 }

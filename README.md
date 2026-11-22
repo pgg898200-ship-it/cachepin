@@ -24,12 +24,13 @@ In late-2026 LLM economics, a cached token read costs **0.05×** on Anthropic Op
 ## 30-Second Quickstart
 
 ```bash
-# Build 1.1 MB zero-dependency binary + 600 KB libcachepin.so (works completely offline)
+# Build 1.1 MB zero-dependency binary + 633 KB libcachepin.so (works completely offline)
 cargo build --release
 
-# 1. Audit any existing JSONL request trace for cache misses & dollar waste (zero proxy needed)
+# 1. Instantly audit your own local Claude Code sessions for cache waste (zero proxy needed)
+./target/release/cachepin audit --claude-code
+# Or audit any raw Anthropic/OpenAI JSONL trace / run the built-in 32-agent swarm demo:
 ./target/release/cachepin audit ./swarm_trace.jsonl
-# Or run the built-in 32-agent demo trace:
 python3 examples/demo_swarm.py
 
 # 2. Drop-in reverse proxy for Cloud APIs or self-hosted vLLM/SGLang fleets
