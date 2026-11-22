@@ -4,6 +4,8 @@
 
 Prefix Atlas computes an exact capacity curve from a tree of shared prompt histories. Long shared paths cost one operation per overlapping run. Developers can emit a fork as a parent, a number of new pages and a request tip, or import an existing Mooncake-format JSONL file. Run the tool offline with a C++17 compiler. The calculator works locally in a browser.
 
+[Recompute the 80% cache threshold in JupyterLab](https://jupyter.org/try-jupyter/lab/index.html?fromURL=https%3A%2F%2Fraw.githubusercontent.com%2Fpgg898200-ship-it%2Fcachepin%2Fmain%2Ftools%2Fprefix-atlas%2Fexamples%2Fsize-prefix-cache.ipynb). Run all cells in your browser with the Python (Pyodide) kernel. [Read the executed notebook](https://nbviewer.org/github/pgg898200-ship-it/cachepin/blob/main/tools/prefix-atlas/examples/size-prefix-cache.ipynb).
+
 ## Install the CLI
 
 Linux x86-64 users with Python 3.9+ and glibc 2.17+ can install the 206 KiB wheel without a compiler:
