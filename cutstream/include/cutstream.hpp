@@ -65,9 +65,13 @@ public:
                 if (nodes_[state].match >= 0) break;
             }
             if (nodes_[state].match < 0) viable[kept++] = id;
+            else std::string{}.swap(stops_[id]);
         }
         if (kept != viable.size()) {
             viable.resize(kept);
+            // Release the unpruned automaton before allocating the smaller one.
+            std::vector<Node>{}.swap(nodes_);
+            std::vector<std::uint32_t>{}.swap(table_);
             compile(viable);
         }
     }
@@ -88,16 +92,24 @@ public:
         std::size_t pos = 0;
         int matched = -1;
         while (pos < chunk.size()) {
-            if (single_start_ && state == 0 &&
-                static_cast<unsigned char>(chunk[pos]) != start_) {
-                const void* hit = std::memchr(chunk.data() + pos, start_, chunk.size() - pos);
-                if (!hit) {
-                    pos = chunk.size();
-                    break;
+            if (state == 0) {
+                if (single_start_ && static_cast<unsigned char>(chunk[pos]) != start_) {
+                    const void* hit = std::memchr(chunk.data() + pos, start_, chunk.size() - pos);
+                    if (!hit) {
+                        pos = chunk.size();
+                        break;
+                    }
+                    pos = static_cast<std::size_t>(static_cast<const char*>(hit) - chunk.data());
                 }
-                pos = static_cast<std::size_t>(static_cast<const char*>(hit) - chunk.data());
+                // Independent root lookups skip literal runs without a serial
+                // DFA dependency for each byte.
+                do {
+                    state = root_[static_cast<unsigned char>(chunk[pos++])];
+                } while (!state && pos < chunk.size());
+                if (!state) break;
+            } else {
+                state = step(state, static_cast<unsigned char>(chunk[pos++]));
             }
-            state = step(state, static_cast<unsigned char>(chunk[pos++]));
             matched = nodes_[state].match;
             if (matched >= 0) break;
         }
@@ -129,6 +141,7 @@ private:
     std::vector<Node> nodes_;
     std::vector<std::uint32_t> table_;
     std::array<std::uint16_t, 256> classes_{};
+    std::array<std::uint32_t, 256> root_{};
     std::size_t stride_ = 1;
     bool single_start_ = false;
     unsigned char start_ = 0;
@@ -187,6 +200,8 @@ private:
             // IDs are inserted in original order, so the first duplicate wins.
             if (nodes_[state].match < 0) nodes_[state].match = id;
         }
+
+        for (unsigned c = 0; c < 256; ++c) root_[c] = table_[classes_[c]];
 
         struct Link { std::uint32_t state, failure; };
         std::vector<Link> queue;

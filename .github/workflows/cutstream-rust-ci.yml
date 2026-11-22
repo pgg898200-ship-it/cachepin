@@ -1,0 +1,56 @@
+name: Compare native streaming stop matchers
+on:
+  push:
+    branches: [cutstream-v0.1]
+    paths:
+      - 'cutstream/src/**'
+      - 'cutstream/tests/**'
+      - 'cutstream/setup.py'
+      - 'cutstream/include/**'
+      - 'cutstream/compare/turbospark/**'
+      - 'include/**'
+      - 'compare/turbospark/**'
+      - '.github/workflows/cutstream-rust-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test native and Python interfaces
+        shell: bash
+        run: |
+          if [[ -f cutstream/include/cutstream.hpp ]]; then cd cutstream; fi
+          c++ -std=c++17 -O3 -Wall -Wextra -Werror -Iinclude tests/test.cpp -o "$RUNNER_TEMP/cutstream-test"
+          "$RUNNER_TEMP/cutstream-test"
+          python3 -m venv "$RUNNER_TEMP/cutstream-venv"
+          source "$RUNNER_TEMP/cutstream-venv/bin/activate"
+          python -m pip install .
+          python -m unittest discover -s tests -p 'test_python.py'
+      - name: Compare against pinned TurboSpark v0.7.1
+        shell: bash
+        run: |
+          if [[ -f cutstream/compare/turbospark/run.py ]]; then cd cutstream; fi
+          python3 compare/turbospark/run.py --output "$RUNNER_TEMP/native-results.json"
+      - name: Summarize matching results
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads((Path(os.environ["RUNNER_TEMP"]) / "native-results.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              print("### Native ASCII replay", file=f)
+              print(data["environment"]["cpu"], file=f)
+              print("\n| Stops | Chunk bytes | Cutstream MiB/s | TurboSpark MiB/s | Time ratio |", file=f)
+              print("|---:|---:|---:|---:|---:|", file=f)
+              for r in data["results"]:
+                  m = r["median_input_MiB_per_s"]
+                  ratio = r["median_time_ratio_turbospark_over_cutstream"]
+                  print(f"| {r['stops']} | {r['chunk_bytes']} | {m['cutstream']:.2f} | {m['turbospark']:.2f} | {ratio:.2f} |", file=f)
+          PY
