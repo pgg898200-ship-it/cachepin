@@ -6,6 +6,9 @@ on:
     paths:
       - "site/**"
       - "benchmarks/results.json"
+      - "llms.txt"
+      - "SKILL.md"
+      - "server.json"
   workflow_dispatch:
 
 permissions:
@@ -26,8 +29,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Assemble Pages bundle with live AEO assets
+        run: |
+          mkdir -p _site
+          cp -r site/* _site/
+          cp llms.txt SKILL.md server.json _site/
+          cp benchmarks/results.json _site/results.json
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
