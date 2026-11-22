@@ -1,6 +1,6 @@
 # Racecurve
 
-**When should you launch a backup request?** Give Racecurve a deadline, a duplicate-request budget and a trace. It chooses a delay on earlier requests and shows what would have happened on the next ones. Use it before changing a hedging timer for replicated reads, tool calls or inference requests.
+**When should you launch a backup request?** Give Racecurve a deadline, a duplicate-request budget and a trace. It selects a delay on earlier requests, then estimates deadline misses and backup launches on held-out requests using the recorded service times. Use it before changing a hedging timer for replicated reads, tool calls or inference requests.
 
 [Open the browser explorer](https://huggingface.co/spaces/pgg-engineering/racecurve) · [Get the measured traces](https://huggingface.co/datasets/pgg-engineering/racecurve-hedge-traces)
 
@@ -27,9 +27,9 @@ The 15 KB wheel includes the example and requires only the Python standard libra
 
 ## What happens on real requests?
 
-[![At 400 requests/s a backup cut 6 ms deadline misses from 10.1% to 1.3%. At 1,600 requests/s misses rose from 26.9% to 98.8%.](experiments/shared-slots/deadline-misses.png)](experiments/shared-slots/hedging-under-load.ipynb)
+[![With the same 1,177 µs backup delay, 6 ms deadline misses fell from 10.1% to 1.3% at 400 requests/s and rose from 26.9% to 98.8% at 1,600 requests/s.](experiments/shared-slots/matched-deadlines.svg)](experiments/shared-slots/hedging-under-load.ipynb)
 
-Two replicas shared two worker slots and every launched copy ran to completion. Change the deadline and count misses across all 36,800 requests. [Run in Colab](https://colab.research.google.com/github/pgg898200-ship-it/cachepin/blob/racecurve/experiments/shared-slots/hedging-under-load.ipynb) · [Read the executed notebook](experiments/shared-slots/hedging-under-load.ipynb)
+Two replicas shared two execution slots on one host. Every launched copy ran to completion. We matched requests by seed and ID across separate runs with the same offered load and service demands. At 400 requests/s, 155 requests were late only without hedging and 15 were late only with hedging. At 1,600 requests/s, the counts were 4 and 4,606. At the third load, 2,600 requests/s, both policies missed over 98% of deadlines. The notebook lets you change the deadline and recount all 36,800 observations. [Run in Colab](https://colab.research.google.com/github/pgg898200-ship-it/cachepin/blob/racecurve/experiments/shared-slots/hedging-under-load.ipynb) · [Read the executed notebook](experiments/shared-slots/hedging-under-load.ipynb)
 
 | Experiment | Observed outcome |
 | --- | --- |
@@ -38,7 +38,7 @@ Two replicas shared two worker slots and every launched copy ran to completion. 
 | Independent GPUHedge RunPod and Modal cold-start data | With an initial 25% launch budget, the policy still missed 11 of 36 deadlines on the later rounds. A 10 s delay cut misses to one and launched 11 backups (30.6%). |
 | Agreement with upstream GPUHedge replay | Deadline-miss and launch counts matched upstream at every one of 6,002 delay/partition combinations. These were 54 measured request pairs, reused across delays. |
 
-The localhost servers completed the losing work. The published GPU evaluation is retrospective. Each experiment fixes the service durations when replaying alternative launch times. A different delay can change queueing and congestion on a loaded deployment. Use live validation for operational decisions. [Local protocol and raw results](examples/README.md) · [GPU methodology, pinned source and reproduction](external/README.md)
+Trace replay holds measured durations fixed. The shared-slot experiment measured separate runs and included queueing and host scheduling. At a different load, a backup can wait for capacity and delay later requests. The published GPU evaluation is retrospective. [Local protocol and raw results](examples/README.md) · [GPU methodology, pinned source and reproduction](external/README.md)
 
 ## Live aggregation for large fanouts
 

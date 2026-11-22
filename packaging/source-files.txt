@@ -19,6 +19,7 @@ experiments/shared-slots/README.md
 experiments/shared-slots/deadline-misses.png
 experiments/shared-slots/hedging-under-load.ipynb
 experiments/shared-slots/load.cpp
+experiments/shared-slots/matched-deadlines.svg
 experiments/shared-slots/measured/r1600-s127995-control.csv.gz
 experiments/shared-slots/measured/r1600-s127995-hedge.csv.gz
 experiments/shared-slots/measured/r1600-s127996-control.csv.gz
