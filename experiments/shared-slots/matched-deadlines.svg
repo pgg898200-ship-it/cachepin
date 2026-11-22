@@ -28,28 +28,28 @@ L 432 360
 L 432 0 
 L 0 0 
 z
-" style="fill: #172437"/>
+" style="fill: #171729"/>
   </g>
   <g id="axes_1">
    <g id="line2d_1">
     <path d="M 90.527143 234.066667 
 L 339.312857 234.066667 
-" clip-path="url(#p65543979ae)" style="fill: none; stroke-dasharray: 1.54,2.59; stroke-dashoffset: 0; stroke: #526071; stroke-width: 0.7"/>
+" clip-path="url(#p65543979ae)" style="fill: none; stroke-dasharray: 1.54,2.59; stroke-dashoffset: 0; stroke: #716d70; stroke-width: 0.7"/>
    </g>
    <g id="line2d_2">
     <path d="M 90.527143 167.4 
 L 339.312857 167.4 
-" clip-path="url(#p65543979ae)" style="fill: none; stroke-dasharray: 1.54,2.59; stroke-dashoffset: 0; stroke: #526071; stroke-width: 0.7"/>
+" clip-path="url(#p65543979ae)" style="fill: none; stroke-dasharray: 1.54,2.59; stroke-dashoffset: 0; stroke: #716d70; stroke-width: 0.7"/>
    </g>
    <g id="line2d_3">
     <path d="M 90.527143 100.733333 
 L 339.312857 100.733333 
-" clip-path="url(#p65543979ae)" style="fill: none; stroke-dasharray: 1.54,2.59; stroke-dashoffset: 0; stroke: #526071; stroke-width: 0.7"/>
+" clip-path="url(#p65543979ae)" style="fill: none; stroke-dasharray: 1.54,2.59; stroke-dashoffset: 0; stroke: #716d70; stroke-width: 0.7"/>
    </g>
    <g id="line2d_4">
     <path d="M 90.527143 220.65 
 L 339.312857 232.316667 
-" clip-path="url(#p65543979ae)" style="fill: none; stroke-dasharray: 10,5.75; stroke-dashoffset: 0; stroke: #7ddccf; stroke-width: 2.5"/>
+" clip-path="url(#p65543979ae)" style="fill: none; stroke-dasharray: 10,5.75; stroke-dashoffset: 0; stroke: #384cfa; stroke-width: 2.5"/>
     <defs>
      <path id="m22a3910769" d="M 0 4.3 
 C 1.140373 4.3 2.234193 3.846925 3.040559 3.040559 
@@ -61,101 +61,101 @@ C -3.846925 -2.234193 -4.3 -1.140373 -4.3 0
 C -4.3 1.140373 -3.846925 2.234193 -3.040559 3.040559 
 C -2.234193 3.846925 -1.140373 4.3 0 4.3 
 z
-" style="stroke: #172437; stroke-width: 1.4"/>
+" style="stroke: #171729; stroke-width: 1.4"/>
     </defs>
     <g clip-path="url(#p65543979ae)">
-     <use xlink:href="#m22a3910769" x="90.527143" y="220.65" style="fill: #7ddccf; stroke: #172437; stroke-width: 1.4"/>
-     <use xlink:href="#m22a3910769" x="339.312857" y="232.316667" style="fill: #7ddccf; stroke: #172437; stroke-width: 1.4"/>
+     <use xlink:href="#m22a3910769" x="90.527143" y="220.65" style="fill: #384cfa; stroke: #171729; stroke-width: 1.4"/>
+     <use xlink:href="#m22a3910769" x="339.312857" y="232.316667" style="fill: #384cfa; stroke: #171729; stroke-width: 1.4"/>
     </g>
    </g>
    <g id="line2d_5">
     <path d="M 90.527143 198.191667 
 L 339.312857 102.316667 
-" clip-path="url(#p65543979ae)" style="fill: none; stroke: #ffb676; stroke-width: 2.5; stroke-linecap: square"/>
+" clip-path="url(#p65543979ae)" style="fill: none; stroke: #ef543c; stroke-width: 2.5; stroke-linecap: square"/>
     <defs>
      <path id="medd537d87f" d="M -4.3 4.3 
 L 4.3 4.3 
 L 4.3 -4.3 
 L -4.3 -4.3 
 z
-" style="stroke: #172437; stroke-width: 1.4; stroke-linejoin: miter"/>
+" style="stroke: #171729; stroke-width: 1.4; stroke-linejoin: miter"/>
     </defs>
     <g clip-path="url(#p65543979ae)">
-     <use xlink:href="#medd537d87f" x="90.527143" y="198.191667" style="fill: #ffb676; stroke: #172437; stroke-width: 1.4; stroke-linejoin: miter"/>
-     <use xlink:href="#medd537d87f" x="339.312857" y="102.316667" style="fill: #ffb676; stroke: #172437; stroke-width: 1.4; stroke-linejoin: miter"/>
+     <use xlink:href="#medd537d87f" x="90.527143" y="198.191667" style="fill: #ef543c; stroke: #171729; stroke-width: 1.4; stroke-linejoin: miter"/>
+     <use xlink:href="#medd537d87f" x="339.312857" y="102.316667" style="fill: #ef543c; stroke: #171729; stroke-width: 1.4; stroke-linejoin: miter"/>
     </g>
    </g>
    <g id="text_1">
-    <text style="font-weight: 700; font-size: 12.4px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #f4f2ea" x="30.818571" y="81.439854" transform="rotate(-0 30.818571 81.439854)">Primary only</text>
+    <text style="font-weight: 700; font-size: 12.4px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #fff3d7" x="30.818571" y="81.439854" transform="rotate(-0 30.818571 81.439854)">Primary only</text>
    </g>
    <g id="text_2">
-    <text style="font-weight: 700; font-size: 12.4px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #f4f2ea" x="394.045714" y="81.48151" transform="rotate(-0 394.045714 81.48151)">Backup after 1,177 µs</text>
+    <text style="font-weight: 700; font-size: 12.4px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="394.045714" y="81.48151" transform="rotate(-0 394.045714 81.48151)">Backup after 1,177 µs</text>
    </g>
    <g id="text_3">
-    <text style="font-weight: 700; font-size: 12.3px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #7ddccf" x="82.527143" y="224.044031" transform="rotate(-0 82.527143 224.044031)">10.1%</text>
+    <text style="font-weight: 700; font-size: 12.3px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="82.527143" y="224.044031" transform="rotate(-0 82.527143 224.044031)">10.1%</text>
    </g>
    <g id="text_4">
-    <text style="font-weight: 700; font-size: 12.3px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #7ddccf" x="347.312857" y="235.710698" transform="rotate(-0 347.312857 235.710698)">1.3%</text>
+    <text style="font-weight: 700; font-size: 12.3px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #fff3d7" x="347.312857" y="235.710698" transform="rotate(-0 347.312857 235.710698)">1.3%</text>
    </g>
    <g id="text_5">
-    <text style="font-weight: 700; font-size: 11.4px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #7ddccf" x="227.359286" y="217.029156" transform="rotate(-0 227.359286 217.029156)">400 requests/s</text>
+    <text style="font-weight: 700; font-size: 11.4px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #fff3d7" x="227.359286" y="217.029156" transform="rotate(-0 227.359286 217.029156)">400 requests/s</text>
    </g>
    <g id="text_6">
-    <text style="font-weight: 700; font-size: 12.3px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #ffb676" x="82.527143" y="201.585698" transform="rotate(-0 82.527143 201.585698)">26.9%</text>
+    <text style="font-weight: 700; font-size: 12.3px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #ef543c" x="82.527143" y="201.585698" transform="rotate(-0 82.527143 201.585698)">26.9%</text>
    </g>
    <g id="text_7">
-    <text style="font-weight: 700; font-size: 12.3px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #ffb676" x="347.312857" y="105.710698" transform="rotate(-0 347.312857 105.710698)">98.8%</text>
+    <text style="font-weight: 700; font-size: 12.3px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #ef543c" x="347.312857" y="105.710698" transform="rotate(-0 347.312857 105.710698)">98.8%</text>
    </g>
    <g id="text_8">
-    <text style="font-weight: 700; font-size: 11.4px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #ffb676" x="165.162857" y="131.695823" transform="rotate(-0 165.162857 131.695823)">1,600 requests/s</text>
+    <text style="font-weight: 700; font-size: 11.4px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #ef543c" x="165.162857" y="131.695823" transform="rotate(-0 165.162857 131.695823)">1,600 requests/s</text>
    </g>
   </g>
   <g id="line2d_6">
    <path d="M 23.76 249.48 
 L 408.24 249.48 
-" style="fill: none; stroke: #526071; stroke-width: 0.8; stroke-linecap: square"/>
+" style="fill: none; stroke: #716d70; stroke-width: 0.8; stroke-linecap: square"/>
   </g>
   <g id="text_9">
-   <text style="font-weight: 700; font-size: 18.3px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #f4f2ea" x="23.76" y="25.2" transform="rotate(-0 23.76 25.2)">When a backup shares the queue</text>
+   <text style="font-weight: 700; font-size: 18.3px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #fff3d7" x="23.76" y="25.2" transform="rotate(-0 23.76 25.2)">When a backup shares the queue</text>
   </g>
   <g id="text_10">
-   <text style="font-size: 12.9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #c5cfd7" x="23.76" y="48.96" transform="rotate(-0 23.76 48.96)">Missed 6 ms deadlines · Two shared execution slots</text>
+   <text style="font-size: 12.9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #fff3d7" x="23.76" y="48.96" transform="rotate(-0 23.76 48.96)">Missed 6 ms deadlines · Two shared execution slots</text>
   </g>
   <g id="text_11">
-   <text style="font-weight: 700; font-size: 12.2px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #f4f2ea" x="23.76" y="269.64" transform="rotate(-0 23.76 269.64)">Matched requests</text>
+   <text style="font-weight: 700; font-size: 12.2px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #fff3d7" x="23.76" y="269.64" transform="rotate(-0 23.76 269.64)">Matched requests</text>
   </g>
   <g id="text_12">
-   <text style="font-weight: 700; font-size: 12.5px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #7ddccf" x="300.24" y="269.64" transform="rotate(-0 300.24 269.64)">400/s</text>
+   <text style="font-weight: 700; font-size: 12.5px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="300.24" y="269.64" transform="rotate(-0 300.24 269.64)">400/s</text>
   </g>
   <g id="text_13">
-   <text style="font-weight: 700; font-size: 12.5px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #ffb676" x="408.24" y="269.64" transform="rotate(-0 408.24 269.64)">1,600/s</text>
+   <text style="font-weight: 700; font-size: 12.5px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #ef543c" x="408.24" y="269.64" transform="rotate(-0 408.24 269.64)">1,600/s</text>
   </g>
   <g id="text_14">
-   <text style="font-size: 11.8px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #c5cfd7" x="23.76" y="292.32" transform="rotate(-0 23.76 292.32)">Late only without backups</text>
+   <text style="font-size: 11.8px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #fff3d7" x="23.76" y="292.32" transform="rotate(-0 23.76 292.32)">Late only without backups</text>
   </g>
   <g id="text_15">
-   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #f4f2ea" x="300.24" y="292.32" transform="rotate(-0 300.24 292.32)">155</text>
+   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="300.24" y="292.32" transform="rotate(-0 300.24 292.32)">155</text>
   </g>
   <g id="text_16">
-   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #f4f2ea" x="408.24" y="292.32" transform="rotate(-0 408.24 292.32)">4</text>
+   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="408.24" y="292.32" transform="rotate(-0 408.24 292.32)">4</text>
   </g>
   <g id="text_17">
-   <text style="font-size: 11.8px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #c5cfd7" x="23.76" y="314.64" transform="rotate(-0 23.76 314.64)">Late only with hedging</text>
+   <text style="font-size: 11.8px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #fff3d7" x="23.76" y="314.64" transform="rotate(-0 23.76 314.64)">Late only with hedging</text>
   </g>
   <g id="text_18">
-   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #f4f2ea" x="300.24" y="314.64" transform="rotate(-0 300.24 314.64)">15</text>
+   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="300.24" y="314.64" transform="rotate(-0 300.24 314.64)">15</text>
   </g>
   <g id="text_19">
-   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #f4f2ea" x="408.24" y="314.64" transform="rotate(-0 408.24 314.64)">4,606</text>
+   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="408.24" y="314.64" transform="rotate(-0 408.24 314.64)">4,606</text>
   </g>
   <g id="text_20">
-   <text style="font-size: 11.8px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #c5cfd7" x="23.76" y="336.6" transform="rotate(-0 23.76 336.6)">Requests per policy</text>
+   <text style="font-size: 11.8px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #fff3d7" x="23.76" y="336.6" transform="rotate(-0 23.76 336.6)">Requests per policy</text>
   </g>
   <g id="text_21">
-   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #f4f2ea" x="300.24" y="336.6" transform="rotate(-0 300.24 336.6)">1,600</text>
+   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="300.24" y="336.6" transform="rotate(-0 300.24 336.6)">1,600</text>
   </g>
   <g id="text_22">
-   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #f4f2ea" x="408.24" y="336.6" transform="rotate(-0 408.24 336.6)">6,400</text>
+   <text style="font-size: 12.1px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #fff3d7" x="408.24" y="336.6" transform="rotate(-0 408.24 336.6)">6,400</text>
   </g>
  </g>
  <defs>
