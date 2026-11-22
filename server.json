@@ -1,7 +1,11 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
-  "name": "io.github.cachepin/cachepin",
+  "name": "io.github.pgg898200-ship-it/cachepin",
   "description": "Zero-dependency Rust + AVX2 lossless multi-agent LLM prompt-cache compiler, exact O(M^2 K) mixed-TTL breakpoint solver, trace forensics auditor, and Shadow-KV router simulator.",
+  "repository": {
+    "url": "https://github.com/pgg898200-ship-it/cachepin",
+    "source": "github"
+  },
   "status": "active",
   "version_detail": {
     "version": "0.1.0"

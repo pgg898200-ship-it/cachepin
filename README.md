@@ -23,23 +23,29 @@ In late-2026 LLM economics, a cached token read costs **0.05×** on Anthropic Op
 
 ## 30-Second Quickstart
 
+Interactive benchmark & swarm billing explorer: **[pgg898200-ship-it.github.io/cachepin](https://pgg898200-ship-it.github.io/cachepin/)**
+
 ```bash
-# Build 1.1 MB zero-dependency binary + 633 KB libcachepin.so (works completely offline)
+# Option A: Install prebuilt 1.1 MB release binary (Linux/macOS, SHA-256 verified)
+curl -fsSL https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/scripts/install.sh | sh
+
+# Option B: Build from source completely offline (0 external Rust crates)
 cargo build --release
 
 # 1. Instantly audit your own local Claude Code sessions for cache waste (zero proxy needed)
-./target/release/cachepin audit --claude-code
+cachepin audit --claude-code
 # Or audit any raw Anthropic/OpenAI JSONL trace / run the built-in 32-agent swarm demo:
-./target/release/cachepin audit ./swarm_trace.jsonl
+cachepin audit ./swarm_trace.jsonl
 python3 examples/demo_swarm.py
 
 # 2. Drop-in reverse proxy for Cloud APIs or self-hosted vLLM/SGLang fleets
-./target/release/cachepin proxy --upstream https://api.anthropic.com --port 47820
+cachepin proxy --upstream https://api.anthropic.com --port 47820
 ANTHROPIC_BASE_URL=http://127.0.0.1:47820 claude
 # Live dark-mode telemetry: http://127.0.0.1:47820/dashboard  |  Prometheus: /metrics
 
-# 3. Native stdio MCP server for Claude Code, Codex, Cursor, Gemini CLI, OpenCode
-./target/release/cachepin mcp
+# 3. Native stdio MCP server or Claude Code Plugin
+cachepin mcp
+# Inside Claude Code: /plugin marketplace add pgg898200-ship-it/cachepin && /plugin install cachepin
 ```
 
 Or embed directly in Python (zero dependencies via `ctypes` + `libcachepin.so`):
