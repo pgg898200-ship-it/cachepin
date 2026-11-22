@@ -1,7 +1,8 @@
-/target/
-*.pyc
+/racecurve
+/tests/check
+/tests/benchmark
+/benchmarks/stream
+/benchmarks/dense
 __pycache__/
-*.egg-info/
-.pytest_cache/
-.DS_Store
-*.log
+*.pyc
+/dist/

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Choose a backup-request delay from measured RPC traces. Replay deadline misses and extra attempts under a launch budget, including censored winner logs."><title>Racecurve · Hedge delay explorer</title><link rel="stylesheet" href="style.css"></head>
+<body><main>
+<header><a class="wordmark" href="./"><span aria-hidden="true" class="glyph">⌁</span> racecurve</a><nav><a href="guide.md">Trace format</a><a href="source.zip">Download source ↗</a></nav></header>
+<section class="intro"><div><div class="eyebrow">REQUEST HEDGING</div><h1>When should the<br>backup start?</h1><p>Replay a request trace. Find the delay that meets your deadline with the fewest extra attempts.</p></div><div class="config">
+<label for="deadline">Response deadline <span>ms</span></label><input id="deadline" type="number" step="0.001" min="0.001" max="1000000" value="6">
+<label for="budget">Extra request budget <span>%</span></label><input id="budget" type="number" step="0.1" min="0" max="100" value="25">
+<div class="upload"><label class="button" for="file">Open trace CSV</label><input id="file" class="hiddenfile" type="file" accept=".csv,text/csv"><button id="reset" type="button">Use example</button></div></div></section>
+<div id="status" aria-live="polite">Loading the measured localhost trace…</div>
+<section class="results" aria-label="Held-out result"><div><small>Selected delay</small><strong id="selected">—</strong></div><div><small>Held-out misses</small><strong id="miss">—</strong></div><div><small>Held-out launches</small><strong id="launch">—</strong></div></section>
+<section class="plot"><div class="plothead"><h2>The delay curve</h2><div class="legend"><span class="orange">●</span> Deadline misses &nbsp; <span class="blue">●</span> Extra attempts</div></div><canvas id="canvas" role="img" aria-label="Deadline miss rate and extra attempt rate against hedge delay on held-out requests"></canvas><div class="axis"><span>Launch immediately</span><span>Backup delay (ms)</span></div>
+<label for="inspect" class="inspect">Inspect a delay <output id="label"></output></label><input type="range" id="inspect" min="0" max="250" value="0"><p id="inspected"></p></section>
+<section class="method"><h2>Reading the result</h2><p id="explain"></p><p>Replay holds service times fixed as the delay changes. A busy backend can respond differently when it receives extra traffic. Use idempotent operations and validate the chosen policy under load.</p><p><a href="guide.md">Algorithm, file formats and reproduction ↗</a></p></section>
+</main><script src="curve.js"></script><script src="app.js"></script></body></html>

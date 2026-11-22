@@ -1,0 +1,63 @@
+{
+  "source": "https://raw.githubusercontent.com/mireklzicar/gpuhedge/669c8c9327c95164cfd317a4cc4c7c123f4afcc4/traces/moss_rounds.jsonl",
+  "sha256": "7b2032386f7ee6183dc260298785cec03f83d22cac464bf0fb695067c79af960",
+  "primary": "runpod",
+  "backup": "modal",
+  "slo_us": 60000000,
+  "step_us": 100000,
+  "points": 3001,
+  "calibration_launch_cap": 0.25,
+  "selected_delay_us": 121700000,
+  "rounds_1_18": {
+    "primary_only": {
+      "delay_us": 300000000,
+      "requests": 18,
+      "misses": 7,
+      "launches": 0,
+      "p95_nearest_rank_us": 121700000,
+      "mean_us": 48031111.11
+    },
+    "upstream_fixed_10s": {
+      "delay_us": 10000000,
+      "requests": 18,
+      "misses": 1,
+      "launches": 7,
+      "p95_nearest_rank_us": 107130000,
+      "mean_us": 26512777.78
+    },
+    "calibrated": {
+      "delay_us": 121700000,
+      "requests": 18,
+      "misses": 7,
+      "launches": 0,
+      "p95_nearest_rank_us": 121700000,
+      "mean_us": 48031111.11
+    }
+  },
+  "rounds_19_54": {
+    "primary_only": {
+      "delay_us": 300000000,
+      "requests": 36,
+      "misses": 11,
+      "launches": 0,
+      "p95_nearest_rank_us": 120070000,
+      "mean_us": 37281666.67
+    },
+    "upstream_fixed_10s": {
+      "delay_us": 10000000,
+      "requests": 36,
+      "misses": 1,
+      "launches": 11,
+      "p95_nearest_rank_us": 52180000,
+      "mean_us": 18320833.33
+    },
+    "calibrated": {
+      "delay_us": 121700000,
+      "requests": 36,
+      "misses": 11,
+      "launches": 1,
+      "p95_nearest_rank_us": 120070000,
+      "mean_us": 37281666.67
+    }
+  }
+}
