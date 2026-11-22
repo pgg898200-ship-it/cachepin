@@ -63,6 +63,24 @@ Make a call before opening the evidence. The six cases use measured request timi
     return "\n".join(lines) + "\n"
 
 
+def gift_text(text):
+    """Quote GIFT metacharacters while keeping stream bytes literal."""
+    return "".join("\\" + c if c in "\\~=#{}:" else c for c in text)
+
+
+def question_bank(cases):
+    questions = []
+    for case in cases:
+        m = case["metadata"]
+        lines = [f"::{case['id']}::[plain]{gift_text(case['input'])} {{"]
+        for letter, choice in zip("ABC", case["choices"]):
+            marker = "=" if letter == case["target"] else "~"
+            lines.append(marker + gift_text(choice))
+        lines += ["####" + gift_text(m["explanation"] + " " + m["source"]), "}"]
+        questions.append("\n".join(lines))
+    return "\n\n".join(questions) + "\n"
+
+
 def main():
     cases = read_cases()
     template = Template(Path(__file__).with_name("page.html").read_text())
@@ -71,6 +89,7 @@ def main():
                                cards="\n".join(map(render_card, cases)))
     (OUT / "index.html").write_text(html)
     (OUT / "course.md").write_text(lesson(cases))
+    (OUT / "on-call.gift.txt").write_text(question_bank(cases))
 
 
 if __name__ == "__main__":

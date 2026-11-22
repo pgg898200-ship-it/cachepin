@@ -1,0 +1,41 @@
+::hedge-budget::[plain]Two replicas share two worker slots. Both copies run to completion. At 400 requests/s, 161 of 1,600 primary-only requests missed 6 ms. A backup after 1.177 ms launched 261 extra copies and reduced misses to 21 of 1,600. You can spend up to 18 extra copies per 100 requests and must keep misses below 2%. Which measured policy meets both limits? {
+~Primary only
+=The 1.177 ms backup
+~Neither policy
+####The backup used 16.31 extra copies per 100 requests and missed 1.31% of deadlines. Primary only missed 10.06%. These rates pool two short runs at this load. https\://github.com/pgg898200-ship-it/cachepin/blob/8f963f09edf68942f9ac6e304e7635d4cf41a27e/experiments/shared-slots/README.md
+}
+
+::hedge-queue::[plain]At 1,600 requests/s, the same two-slot pool saw 1,722 deadline misses among 6,400 requests with primary only. With the backup timer it saw 6,324 misses among 6,400 and launched 6,350 extra copies. If you switch from hedging to primary only for this recorded workload, how many additional requests meet the deadline? {
+~26
+~4,678
+=4,602
+####Primary only met 4,678 deadlines. Hedging met 76. The difference is 4,602 requests. Changing the timer itself would require another run because it changes what enters the shared queue. https\://github.com/pgg898200-ship-it/cachepin/blob/f93cc10e6770a7a839f5bb05d9de2c6a3a08fa99/experiments/shared-slots/hedging-under-load.ipynb
+}
+
+::stop-split::[plain]Your gateway suppresses the literal stop marker </tool> and everything after it. The client should receive each safe byte as soon as possible. The decoded chunks are 'ready\:</to' and 'ol>next'. What can the gateway emit on the first chunk, and what does the client see in total? {
+=First 'ready\:' and total 'ready\:'
+~First 'ready\:</to' and total 'ready\:</to'
+~First nothing and total 'ready\:'
+####The suffix </to could still complete the stop. Everything before it is safe immediately. The next three bytes complete the marker, so the client receives only ready\:. https\://github.com/pgg898200-ship-it/cachepin/blob/f551be155fbc44bfcb330cb6826d59aca2dd080b/cutstream/README.md
+}
+
+::stop-eof::[plain]The only stop is </tool>. A gateway gets 'ready\:</to' and then an orderly end of stream. It has already emitted 'ready\:'. Which bytes must it emit when it finishes? {
+~Nothing
+=</to
+~</tool>
+####The stream ended before the marker completed. The four held bytes are ordinary output. A gateway that discards them silently truncates a valid response. https\://github.com/pgg898200-ship-it/cachepin/blob/f551be155fbc44bfcb330cb6826d59aca2dd080b/cutstream/src/cutstream/__init__.py
+}
+
+::cache-first-byte::[plain]Two requests have the same long runbook. Their tool lists start [read_log, find_runbook] and [find_runbook, read_log]. The final user messages differ too. A byte-prefix replay reports 68 matching bytes. With tools serialized before the runbook, which change should you test first to recover the shared prefix while keeping both user requests intact? {
+~Pad the runbook to the next cache block
+~Put both user messages in a shared header
+=Emit both tool lists in the same stable order
+####The first mismatch is the first tool name. The v0.2.0 fixture reports zero modeled matched tokens as sent and 1,099 after canonicalization. The two final questions remain distinct. This assumes tool order can be standardized in your application. https\://github.com/pgg898200-ship-it/cachepin/tree/adec42973f715c7c2bb935f32dfebdda8ce35e2b/examples/prefix-diff
+}
+
+::cache-meter::[plain]The offline replay estimates 1,099 reusable tokens on the second request. A teammate wants to enter 1,099 cache-read tokens in the cost report. Which observation would justify recording that exact number as actual cache reads? {
+=The provider usage record for that request shows 1,099 cache-read input tokens
+~The two requests used the same model and the estimate reproduced twice
+~The second response finished faster than the first
+####The replay estimates prefix reuse. The provider’s usage record measures billed cache reads for the real request. Latency and matching input bytes cannot supply that billing counter. https\://github.com/pgg898200-ship-it/cachepin/blob/adec42973f715c7c2bb935f32dfebdda8ce35e2b/README.md
+}
