@@ -1,0 +1,29 @@
+{
+  "model": "claude-sonnet-4-5",
+  "tools": [
+    {
+      "name": "read_log",
+      "description": "Read the current deployment log.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "find_runbook",
+      "description": "Find entries in the shared runbook.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "system": "01. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n02. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n03. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n04. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n05. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n06. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n07. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n08. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n09. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n10. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n11. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n12. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n13. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n14. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n15. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n16. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n17. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n18. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n19. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n20. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n21. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n22. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n23. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n24. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n25. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n26. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n27. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n28. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n29. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n30. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n31. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n32. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n33. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n34. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n35. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n36. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n37. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n38. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n39. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. \n40. For each incident, read the deployment log, find the first failed check, and cite the matching runbook entry. ",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Summarize the new error."
+    }
+  ],
+  "max_tokens": 256
+}

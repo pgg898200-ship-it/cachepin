@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>cachepin — Lossless Multi-Agent LLM Prompt &amp; KV-Cache Compiler</title>
-  <meta name="description" content="Zero-dependency Rust + AVX2/NEON multi-agent prompt-cache compiler, exact O(M^2 K) mixed-TTL DP breakpoint solver, TTFT single-flight coalescer, and Shadow-KV adaptive radix router." />
+  <title>CachePin · Compare LLM prompt prefixes</title>
+  <meta name="description" content="Compare two LLM requests, find the first byte that changes, and see how much prompt prefix can be reused. Try the local browser demo or run the Rust CLI." />
   <link rel="canonical" href="https://pgg898200-ship-it.github.io/cachepin/" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="cachepin — Pin your prefix. Stop burning 15×–40× on broken LLM caches." />
-  <meta property="og:description" content="Zero-dep Rust + AVX2/NEON prompt-cache compiler, exact O(M²K) mixed-TTL DP solver, 32→1 thundering-herd coalescer, and 8-GPU Shadow-KV router. 100% lossless." />
+  <meta property="og:title" content="CachePin · Compare LLM prompt prefixes" />
+  <meta property="og:description" content="Compare two LLM requests, find the first byte that changes, and see how much prompt prefix can be reused. Try the local browser demo or run the Rust CLI." />
   <meta property="og:url" content="https://pgg898200-ship-it.github.io/cachepin/" />
-  <meta property="og:image" content="https://pgg898200-ship-it.github.io/cachepin/og-card.svg" />
+  <meta property="og:image" content="https://pgg898200-ship-it.github.io/cachepin/og-card.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="cachepin — Lossless Multi-Agent LLM Prompt & KV-Cache Compiler" />
-  <meta name="twitter:description" content="44+ GB/s SIMD prefix diff · Sub-150 µs compile · 32→1 herd writes · 15.37× swarm cost reduction · 0 external crates." />
-  <meta name="twitter:image" content="https://pgg898200-ship-it.github.io/cachepin/og-card.svg" />
+  <meta name="twitter:title" content="CachePin · Compare LLM prompt prefixes" />
+  <meta name="twitter:description" content="Compare two LLM requests, find the first byte that changes, and see how much prompt prefix can be reused. Try the local browser demo or run the Rust CLI." />
+  <meta name="twitter:image" content="https://pgg898200-ship-it.github.io/cachepin/og-card.png" />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -27,28 +27,21 @@
     "url": "https://pgg898200-ship-it.github.io/cachepin/",
     "codeRepository": "https://github.com/pgg898200-ship-it/cachepin",
     "programmingLanguage": ["Rust", "Python"],
-    "description": "Zero-dependency Rust + AVX2/NEON lossless multi-agent LLM prompt-cache compiler, exact O(M^2 K) mixed-TTL DP breakpoint solver, TTFT single-flight coalescer, trace auditor, and Shadow-KV adaptive radix router."
+    "description": "Compare two LLM requests, find the first byte that changes, and see how much prompt prefix can be reused. Try the local browser demo or run the Rust CLI."
   }
   </script>
   <style>
     :root {
-      --bg: #07090d;
-      --panel: #0e131b;
-      --panel-2: #131a25;
-      --border: #1f2a3a;
-      --fg: #e7edf5;
-      --muted: #8b9bb4;
-      --accent: #38bdf8;
-      --green: #34d399;
-      --amber: #fbbf24;
-      --red: #f87171;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      --bg: #f8f5eb; --panel: #fffdf4; --panel-2: #eeeada; --border: #c5c0ab;
+      --fg: #222b22; --muted: #536050; --accent: #245b44;
+      --green: #26633f; --amber: #ae6320; --red: #a03f24;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: Inter, system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: radial-gradient(1200px 600px at 50% -10%, rgba(56,189,248,0.12), transparent 60%), var(--bg);
+      background: var(--bg);
       color: var(--fg);
       font-family: var(--sans);
       line-height: 1.55;
@@ -97,7 +90,7 @@
     .bar-head { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px; font-family: var(--mono); }
     .bar-track { height: 12px; background: var(--panel-2); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
     .bar-fill { height: 100%; border-radius: 999px; transition: width 0.25s ease; }
-    .diff-box { background: #090d14; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: var(--mono); font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 220px; overflow-y: auto; }
+    .diff-box { background: #faf8f0; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: var(--mono); font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 220px; overflow-y: auto; }
     .diff-ok { color: var(--green); }
     .diff-bad { color: var(--red); background: rgba(248,113,113,0.16); padding: 1px 3px; border-radius: 3px; }
     .pill-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -115,87 +108,60 @@
     footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .brand { font: 700 1.8rem Georgia, serif; color: var(--fg); }
+    .brand span { color: var(--amber); }
+    .badges a { color: var(--fg); font: 600 .82rem var(--mono); padding: .45rem; }
+    .hero { padding: clamp(2.4rem,6vw,5rem) 0 2.3rem; }
+    h1 { font: 500 clamp(2.9rem,7vw,6rem)/1.02 Georgia, serif; letter-spacing: -.055em; max-width: 17ch; }
+    h1 em { color: var(--accent); }
+    .sub { max-width: 65ch; font-size: clamp(1rem,1.9vw,1.19rem); }
+    .jump, .read { display: inline-block; font-weight: 650; padding: .65rem 1rem; }
+    .jump { background: var(--accent); color: #fffdf4; border-radius: 3px; }
+    h2 { font: 600 clamp(1.6rem,3vw,2.25rem)/1.16 Georgia, serif; letter-spacing: -.03em; }
+    .card, .kpi, textarea, select, .preset-btn, .diff-box { border-radius: 3px; }
+    .grid-2 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .preset-btn { color: var(--fg); font-size: .79rem; padding: .4rem .65rem; }
+    .preset-btn.active { background: var(--fg); color: #fffdf4; }
+    .meter { padding: .65rem 0; margin-bottom: .75rem; }
+    .track-row { display:grid; grid-template-columns: 4.4rem minmax(48px,1fr) minmax(8rem,auto); gap:.6rem; align-items:center; margin:.45rem 0; font: .78rem var(--mono); }
+    .meter-track { height:1.05rem; background:repeating-linear-gradient(120deg,#e5dfcf 0 3px,#faf8f0 3px 7px); border:1px solid #b5ad94; }
+    .meter-fill { display:block; height:100%; background:var(--green); }
+    .meter-fill.raw { background:var(--amber); }
+    .track-value { text-align:right; }
+    .diff-box { white-space:pre-wrap; }
+    a:focus-visible, button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid #935117; outline-offset:2px; }
+    @media(max-width:680px){ .grid-2{grid-template-columns:1fr} .wrap{padding:16px 14px 42px} .card{padding:12px} .toggles{grid-template-columns:1fr} .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} .track-row{font-size:.68rem;grid-template-columns:3.4rem minmax(20px,1fr) auto} }
+
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <div class="brand"><span class="dot"></span> cachepin <span style="color:var(--muted);font-weight:400;font-size:13px">v0.2.0</span></div>
-      <div class="badges">
-        <a class="badge" href="https://github.com/pgg898200-ship-it/cachepin" target="_blank" rel="noopener">GitHub Repo</a>
-        <a class="badge" href="https://registry.modelcontextprotocol.io/v0.1/servers?search=cachepin" target="_blank" rel="noopener">MCP Registry</a>
-        <a class="badge" href="./llms.txt">llms.txt</a>
-        <a class="badge" href="./SKILL.md">SKILL.md</a>
-        <a class="badge" href="./results.json">results.json</a>
-        <span class="badge">AVX2 + ARM64 NEON · 0 Crates</span>
-      </div>
+      <a class="brand" href="./" aria-label="CachePin home">CachePin<span aria-hidden="true">▥</span></a>
+      <nav class="badges" aria-label="Product links">
+        <a href="https://github.com/pgg898200-ship-it/cachepin">GitHub</a>
+        <a href="https://github.com/pgg898200-ship-it/cachepin/releases/latest">Download CLI</a>
+        <a href="./llms.txt">Agent docs</a>
+      </nav>
     </header>
-
+    <main>
     <div class="hero">
-      <h1>Pin your prefix. Stop burning <span>15×–40×</span> on broken multi-agent LLM caches.</h1>
-      <p class="sub">
-        Zero-dependency Rust + AVX2/NEON multi-agent prompt-cache compiler, exact O(M²K) mixed-TTL breakpoint solver,
-        TTFT-triggered single-flight thundering-herd coalescer, keep-alive proxy, and Shadow-KV adaptive radix router.
-        Works across Anthropic, OpenAI, vLLM, SGLang, Claude Code, Codex, and MCP.
-      </p>
-
-      <div class="cmd-strip">
-        <div class="cmd-box">
-          <div class="cmd-label"><span>1. Audit Local Claude Code &amp; Codex Logs</span><button class="copy-btn" data-copy="cachepin audit --auto">Copy</button></div>
-          <div class="cmd-code">cachepin audit --auto</div>
-        </div>
-        <div class="cmd-box">
-          <div class="cmd-label"><span>2. Instant Byte-Level Prefix Diff</span><button class="copy-btn" data-copy="cachepin diff agent_a.json agent_b.json">Copy</button></div>
-          <div class="cmd-code">cachepin diff agent_a.json agent_b.json</div>
-        </div>
-        <div class="cmd-box">
-          <div class="cmd-label"><span>3. Drop-In Cloud / vLLM Reverse Proxy</span><button class="copy-btn" data-copy="cachepin proxy --upstream https://api.anthropic.com --port 47820">Copy</button></div>
-          <div class="cmd-code">cachepin proxy --upstream https://api.anthropic.com --port 47820</div>
-        </div>
-        <div class="cmd-box">
-          <div class="cmd-label"><span>4. Install Prebuilt Binary / Agent Skill</span><button class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/scripts/install.sh | sh">Copy</button></div>
-          <div class="cmd-code">curl -fsSL https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/scripts/install.sh | sh</div>
-        </div>
-      </div>
-
-      <div class="kpis">
-        <div class="kpi">
-          <div class="kpi-val accent" id="kpi-lcp">42.56 GB/s</div>
-          <div class="kpi-lbl" id="kpi-lcp-sub">AVX2 prefix diff (50.3× vs Node 22)</div>
-          <span class="tag">[LIVE-CPU]</span>
-        </div>
-        <div class="kpi">
-          <div class="kpi-val" id="kpi-compile">84.2 µs</div>
-          <div class="kpi-lbl" id="kpi-compile-sub">18.5 KiB P50 (22.3× Py · 3.45× Node)</div>
-          <span class="tag">[LIVE-CPU]</span>
-        </div>
-        <div class="kpi">
-          <div class="kpi-val green" id="kpi-herd">32 → 1</div>
-          <div class="kpi-lbl">Cold thundering-herd writes (-96.9%)</div>
-          <span class="tag">[LIVE-CPU]</span>
-        </div>
-        <div class="kpi">
-          <div class="kpi-val green" id="kpi-swarm">15.39×</div>
-          <div class="kpi-lbl">32-agent coding swarm cost reduction</div>
-          <span class="tag">[SIM-TRACE]</span>
-        </div>
-        <div class="kpi">
-          <div class="kpi-val accent" id="kpi-route">1.16 µs</div>
-          <div class="kpi-lbl">8-GPU Shadow-KV route P50 (-37% P99)</div>
-          <span class="tag">[LIVE-CPU]</span>
-        </div>
-      </div>
+      <h1>Where do your prompts <em>split?</em></h1>
+      <p class="sub">Two agents load the same tools in a different order. The second request can lose a reusable prefix. CachePin finds the first change and shows what a consistent order would recover.</p>
+      <a class="jump" href="#compare">Compare two prompts ↓</a>
+      <a class="read" href="https://github.com/pgg898200-ship-it/cachepin#try-a-pair-of-requests">Run the CLI example ↗</a>
     </div>
 
-    <section>
-      <h2>Live In-Browser Prompt Diff &amp; Lossless Compiler Playground</h2>
-      <p class="sec-desc">Paste or edit two real multi-agent JSON requests below. Inspect the exact raw byte where KV caching shatters, then watch <code>cachepin</code>'s 4 lossless passes (JSON key sort, tool sort, bijective <code>⟦cp:vN⟧</code> volatile hoisting, All-Gather alignment) restore 100% shared prefix identity.</p>
+    <section id="compare" aria-labelledby="compare-title">
+      <h2 id="compare-title">Prefix comparison</h2>
+      <p class="sec-desc">Choose a pair or edit the JSON. This browser example compares the serialized model, tools and system fields in UTF-8 before and after normalization. It omits messages. Use the CLI for a full request diagnosis and token estimates.</p>
       <div class="card">
         <div class="pill-row">
-          <button class="preset-btn active" data-preset="drift">Preset 1: Tool + Key + Timestamp Drift</button>
-          <button class="preset-btn" data-preset="allgather">Preset 2: All-Gather Permuted Docs (arXiv:2604.03143)</button>
-          <button class="preset-btn" data-preset="injection">Preset 3: Prompt-Injection Sentinel Escape</button>
+          <button class="preset-btn active" data-preset="drift">Tool order and timestamps</button>
+          <button class="preset-btn" data-preset="allgather">Shared documents</button>
+          <button class="preset-btn" data-preset="injection">Request IDs and literal markers</button>
         </div>
+        <div id="prefix-meter" class="meter" role="group" aria-label="Shared prefix length"></div>
         <div class="grid-2">
           <div>
             <label><span>Agent A Request Payload (JSON)</span>
@@ -208,14 +174,14 @@
             </label>
           </div>
         </div>
-        <div style="margin-top:16px" class="pill-row" id="pg-chips"></div>
+        <div style="margin-top:16px" class="pill-row" id="pg-chips" aria-live="polite"></div>
         <div class="grid-2" style="margin-top:10px">
           <div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">Raw Prefix Divergence (Before cachepin)</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">First difference · before normalization</div>
             <div class="diff-box" id="pg-raw-diff"></div>
           </div>
           <div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">Lossless Canonical Prefix + Hoisted Bindings (After cachepin)</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">First difference · after normalization</div>
             <div class="diff-box" id="pg-opt-diff"></div>
           </div>
         </div>
@@ -223,17 +189,17 @@
     </section>
 
     <section>
-      <h2>Interactive Multi-Agent Swarm Billing Simulator</h2>
-      <p class="sec-desc">Compute exact late-2026 provider economics using cachepin's pricing model (input, 5m/1h writes, 0.025×–0.05× cache reads, and cold-start thundering herds).</p>
+      <h2>Estimate a cache bill</h2>
+      <p class="sec-desc">Change the workload and compare two scenarios. The model assumes the normalized workload pays for one prefix write. Actual hits depend on your provider, timing and cache capacity.</p>
       <div class="grid-2">
         <div class="card ctrl">
           <label>
-            <span>Model &amp; Provider Cache Economics</span>
+            <span>Illustrative input / write / hit rates per million tokens</span>
             <select id="model">
-              <option value="opus55">Claude Opus 5.5 ($4.00 in / $5.00 5m / $0.20 hit · 0.05×)</option>
-              <option value="sonnet55">Claude Sonnet 5.5 ($2.00 in / $2.50 5m / $0.10 hit · 0.05×)</option>
-              <option value="fable51">Claude Fable 5.1 ($3.00 in / $3.75 5m / $0.075 hit · 0.025×)</option>
-              <option value="gpt56">OpenAI GPT-5.6 ($2.50 in / $3.125 write / $0.125 hit · 0.05×)</option>
+              <option value="opus55">$4.00 in / $5.00 5m / $0.20 hit</option>
+              <option value="sonnet55">$2.00 in / $2.50 5m / $0.10 hit</option>
+              <option value="fable51">$3.00 in / $3.75 5m / $0.075 hit</option>
+              <option value="gpt56">$2.50 in / $3.125 write / $0.125 hit</option>
             </select>
           </label>
           <label>
@@ -272,11 +238,11 @@
           </div>
 
           <div class="bar-row">
-            <div class="bar-head"><span>Raw Un-Canonicalized Swarm</span><span id="out-raw" style="color:var(--red)">$40.50</span></div>
+            <div class="bar-head"><span>Baseline workload</span><span id="out-raw" style="color:var(--red)">$40.50</span></div>
             <div class="bar-track"><div id="bar-raw" class="bar-fill" style="width:100%;background:var(--red)"></div></div>
           </div>
           <div class="bar-row">
-            <div class="bar-head"><span>After cachepin (100% Lossless)</span><span id="out-opt" style="color:var(--green)">$2.65</span></div>
+            <div class="bar-head"><span>One shared prefix write</span><span id="out-opt" style="color:var(--green)">$2.65</span></div>
             <div class="bar-track"><div id="bar-opt" class="bar-fill" style="width:7%;background:var(--green)"></div></div>
           </div>
 
@@ -291,8 +257,39 @@
             </div>
           </div>
           <p style="margin:16px 0 0;font-size:12px;color:var(--muted)">
-            Assumes 512 fresh uncached tokens/turn per agent. All numbers reproduce analytically from <code>src/pricing.rs</code>.
+            Assumes 512 fresh uncached tokens/turn per agent. Hit-rate penalties for tool order, timestamps and document order are fixed assumptions in this simulator.
           </p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Recorded measurements</h2>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi-val accent" id="kpi-lcp">42.56 GB/s</div>
+          <div class="kpi-lbl" id="kpi-lcp-sub">AVX2 prefix diff (50.3× vs Node 22)</div>
+          <span class="tag">[LIVE-CPU]</span>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val" id="kpi-compile">84.2 µs</div>
+          <div class="kpi-lbl" id="kpi-compile-sub">18,535-byte input, p50 (22.3× Py · 3.45× Node)</div>
+          <span class="tag">[LIVE-CPU]</span>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val green" id="kpi-herd">32 → 1</div>
+          <div class="kpi-lbl">Cold writes in a 32-request loopback burst</div>
+          <span class="tag">[LIVE-CPU]</span>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val green" id="kpi-swarm">15.39×</div>
+          <div class="kpi-lbl">Synthetic 32-agent cost ratio</div>
+          <span class="tag">[SIM-TRACE]</span>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val accent" id="kpi-route">1.16 µs</div>
+          <div class="kpi-lbl">Local route decision, 8 backends (p50)</div>
+          <span class="tag">[LIVE-CPU]</span>
         </div>
       </div>
     </section>
@@ -326,7 +323,7 @@
 
     <section>
       <h2>Reproducible Cross-Language Controls <span class="tag">[LIVE-CPU]</span></h2>
-      <p class="sec-desc">Measured on identical 18.5 KiB multi-agent payloads (<code>benchmarks/compare_controls.py</code> → <code>benchmarks/results.json</code>). Live-hydrated directly from <a href="./results.json">results.json</a>.</p>
+      <p class="sec-desc">Measured on identical 18,535-byte multi-agent payloads (<code>benchmarks/compare_controls.py</code> → <code>benchmarks/results.json</code>). Live-hydrated directly from <a href="./results.json">results.json</a>.</p>
       <div class="card" style="overflow-x:auto">
         <table>
           <thead>
@@ -348,9 +345,12 @@
       </div>
     </section>
 
+    </main>
     <footer>
-      <div>Zero external crates · Zero telemetry · 100% lossless bijection</div>
-      <div>Reproduce every number: <code>./scripts/verify.sh</code> · Dual-licensed MIT / Apache-2.0</div>
+      <a href="https://github.com/pgg898200-ship-it/cachepin/blob/main/docs/INTEGRATIONS.md">Integrate CachePin</a>
+      <a href="./prefix-atlas/">Size a cache with Prefix Atlas</a>
+      <a href="./results.json">Benchmark data (JSON)</a>
+      <a href="./llms.txt">Agent docs</a>
     </footer>
   </div>
 
@@ -364,7 +364,7 @@
       document.getElementById("kpi-lcp").textContent = c.cachepin_rust_native.lcp_throughput_gb_s.toFixed(2) + " GB/s";
       document.getElementById("kpi-lcp-sub").textContent = (s.simd_backend || "simd").toUpperCase() + " prefix diff (" + spd.lcp_vs_node22_x.toFixed(1) + "× vs Node 22)";
       document.getElementById("kpi-compile").textContent = c.cachepin_rust_native.compile_p50_us.toFixed(1) + " µs";
-      document.getElementById("kpi-compile-sub").textContent = "18.5 KiB P50 (" + spd.compile_vs_python_x.toFixed(1) + "× Py · " + spd.compile_vs_node22_x.toFixed(2) + "× Node)";
+      document.getElementById("kpi-compile-sub").textContent = "18,535-byte input, p50 (" + spd.compile_vs_python_x.toFixed(1) + "× Py · " + spd.compile_vs_node22_x.toFixed(2) + "× Node)";
       document.getElementById("kpi-herd").textContent = s.herd_raw_writes + " → " + s.herd_coalesced_writes;
       document.getElementById("kpi-swarm").textContent = s.swarm32_cost_multiplier.toFixed(2) + "×";
       document.getElementById("kpi-route").textContent = s.route_p50_us.toFixed(2) + " µs";
@@ -456,7 +456,7 @@
     function canonVal(v) {
       if (Array.isArray(v)) return v.map(canonVal);
       if (v && typeof v === "object") {
-        const out = {};
+        const out = Object.create(null);
         for (const k of Object.keys(v).sort()) out[k] = canonVal(v[k]);
         return out;
       }
@@ -505,55 +505,60 @@
       return { canonical: JSON.stringify(root), prefixOnly, bindings, toolsSorted, agSorted };
     }
 
-    function lcpIndex(a, b) {
-      const n = Math.min(a.length, b.length);
-      let i = 0;
-      while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
-      return i;
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    function prefixResult(left, right) {
+      const a = encoder.encode(left);
+      const b = encoder.encode(right);
+      let shared = 0;
+      while (shared < a.length && shared < b.length && a[shared] === b[shared]) shared++;
+      return { a, b, shared, total: Math.max(a.length, b.length) };
     }
 
-    function escHtml(s) {
-      return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+    function strip(label, result, kind) {
+      const width = 100 * result.shared / Math.max(1, result.total);
+      return `<div class="track-row"><span>${label}</span><span class="meter-track"><span class="meter-fill ${kind}" style="width:${width}%"></span></span><span class="track-value">${result.shared} / ${result.total} bytes</span></div>`;
+    }
+
+    function showWindow(el, result) {
+      const { a, b, shared } = result;
+      if (shared === a.length && shared === b.length) {
+        el.textContent = `All ${shared} UTF-8 bytes match.`;
+        return;
+      }
+      const snippet = bytes => decoder.decode(bytes.subarray(shared, shared + 64)) || "(end of prefix)";
+      el.textContent = `First different byte: ${shared} (zero-based)\n\nA → ${snippet(a)}\nB → ${snippet(b)}`;
+    }
+
+    function prefixes(value) {
+      if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("Enter a JSON request object.");
+      if (!["model","system","tools"].some(key => Object.hasOwn(value,key))) throw new Error("Include a model, system or tools field to compare.");
+      return {
+        raw: JSON.stringify({model: value.model, system: value.system, tools: value.tools}),
+        normalized: compilePayloadJS(value)
+      };
     }
 
     function runPlayground() {
-      const chips = document.getElementById("pg-chips");
-      const rawEl = document.getElementById("pg-raw-diff");
-      const optEl = document.getElementById("pg-opt-diff");
+      const message = document.getElementById("pg-chips");
+      const meter = document.getElementById("prefix-meter");
+      const beforeBox = document.getElementById("pg-raw-diff");
+      const afterBox = document.getElementById("pg-opt-diff");
       try {
-        const rawAStr = document.getElementById("pg-a").value;
-        const rawBStr = document.getElementById("pg-b").value;
-        const objA = JSON.parse(rawAStr);
-        const objB = JSON.parse(rawBStr);
-        const compRawA = JSON.stringify(objA);
-        const compRawB = JSON.stringify(objB);
-        const rawLcp = lcpIndex(compRawA, compRawB);
-        const rawPct = (rawLcp / Math.max(1, Math.min(compRawA.length, compRawB.length))) * 100;
-
-        const outA = compilePayloadJS(objA);
-        const outB = compilePayloadJS(objB);
-        const optLcp = lcpIndex(outA.prefixOnly, outB.prefixOnly);
-        const optPct = (optLcp / Math.max(1, Math.min(outA.prefixOnly.length, outB.prefixOnly.length))) * 100;
-
-        chips.innerHTML =
-          `<span class="stat-chip bad">Raw prefix match: ${rawLcp} B (${rawPct.toFixed(1)}%) · breaks at byte ${rawLcp}</span>` +
-          `<span class="stat-chip good">After cachepin shared prefix: ${optLcp}/${outA.prefixOnly.length} B (${optPct.toFixed(1)}%)</span>` +
-          `<span class="stat-chip">Hoisted volatile bindings: ${outA.bindings.length} (A) / ${outB.bindings.length} (B)</span>`;
-
-        const sStart = Math.max(0, rawLcp - 42);
-        rawEl.innerHTML =
-          `<span class="diff-ok">${escHtml(compRawA.slice(sStart, rawLcp))}</span>` +
-          `<span class="diff-bad">${escHtml(compRawA.slice(rawLcp, rawLcp + 90))}</span>\n\n` +
-          `vs Agent B @ byte ${rawLcp}:\n` +
-          `<span class="diff-ok">${escHtml(compRawB.slice(sStart, rawLcp))}</span>` +
-          `<span class="diff-bad">${escHtml(compRawB.slice(rawLcp, rawLcp + 90))}</span>`;
-
-        const bindNote = outA.bindings.length
-          ? "\n\nTrailing hoisted bindings (non-cached tail, 100% lossless):\n" + outA.bindings.map(b => `  ${b.anchor} = ${b.original}`).join("\n")
-          : "\n\nZero volatile spans needed hoisting; All-Gather + JSON canonicalization matched 100% of prefix bytes.";
-        optEl.innerHTML = `<span class="diff-ok">${escHtml(outA.prefixOnly)}</span>` + escHtml(bindNote);
-      } catch (e) {
-        chips.innerHTML = `<span class="stat-chip bad">JSON parse error: ${escHtml(e.message)}</span>`;
+        const a = prefixes(JSON.parse(document.getElementById("pg-a").value));
+        const b = prefixes(JSON.parse(document.getElementById("pg-b").value));
+        const before = prefixResult(a.raw, b.raw);
+        const after = prefixResult(a.normalized.prefixOnly, b.normalized.prefixOnly);
+        meter.innerHTML = strip("Before", before, "raw") + strip("After", after, "");
+        message.textContent = `Matching UTF-8 bytes out of the longer prefix. Volatile values moved to the tail: A ${a.normalized.bindings.length}, B ${b.normalized.bindings.length}.`;
+        showWindow(beforeBox, before);
+        showWindow(afterBox, after);
+      } catch (error) {
+        message.textContent = error.message;
+        meter.replaceChildren();
+        beforeBox.replaceChildren();
+        afterBox.replaceChildren();
       }
     }
 
@@ -568,7 +573,7 @@
     ["pg-a", "pg-b"].forEach(id => document.getElementById(id).addEventListener("input", runPlayground));
     loadPreset("drift");
 
-    // -------- Interactive Multi-Agent Swarm Billing Simulator --------
+    // -------- Estimate a cache bill --------
     const MODELS = {
       opus55:   { inP: 4.0, w5: 5.0,   hit: 0.20  },
       sonnet55: { inP: 2.0, w5: 2.5,   hit: 0.10  },
@@ -632,14 +637,6 @@
     ["model", "agents", "prefix", "turns", "f-drift", "f-vol", "f-ag", "f-herd"].forEach(id => {
       document.getElementById(id).addEventListener("input", update);
       document.getElementById(id).addEventListener("change", update);
-    });
-    document.querySelectorAll(".copy-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        navigator.clipboard?.writeText(btn.dataset.copy).catch(() => {});
-        const orig = btn.textContent;
-        btn.textContent = "Copied";
-        setTimeout(() => { btn.textContent = orig; }, 1200);
-      });
     });
     update();
   </script>

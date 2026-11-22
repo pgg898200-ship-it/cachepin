@@ -1,42 +1,21 @@
-# cachepin
+# CachePin
 
-> Zero-dependency Rust + AVX2/NEON SIMD multi-agent LLM prompt-cache compiler, exact O(M^2 K) mixed-TTL breakpoint optimizer, TTFT-triggered single-flight thundering-herd coalescer, HTTP/1.1 keep-alive proxy, and replication-aware Shadow-KV radix router. 100% lossless; works with Anthropic, OpenAI, vLLM, SGLang, Claude Code, Codex, and MCP.
+> Local Rust CLI, stdio MCP server, and optional reverse proxy for diagnosing LLM prompt-cache misses. Use it when Anthropic Messages or OpenAI-style requests from multiple agents share a system prompt or tools but serialize them differently.
 
-## Core Documentation
+## Start with a read-only comparison
 
-- [README.md](README.md): Overview, 30-second quickstart (`curl | sh`, Homebrew, Nix, Docker/GHCR, offline Cargo), verified [LIVE-CPU] and [SIM-TRACE] benchmarks, SVG charts, competitor matrix, and honest scope limits.
-- [SKILL.md](SKILL.md): Agent-first declarative workflow (`npx skills add pgg898200-ship-it/cachepin`), CLI task table (`audit --auto/--claude-code/--codex`, `diff`, `proxy`, `optimize`, `mcp`, `bench`), MCP tool schemas, and zero-dependency Python SDK usage.
-- [docs/ALGORITHMS.md](docs/ALGORITHMS.md): Formal specification of bijective volatile hoisting, All-Gather collective alignment, exact O(M^2 K) mixed-TTL DP, TTFT single-flight coalescing, Shadow-KV adaptive routing, and AVX2/NEON SIMD kernels.
-- [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md): Drop-in configuration for Claude Code, Codex, Anthropic Messages, OpenAI Chat/Responses, vLLM/SGLang fleets, MCP clients, and stacking with caveman/context-mode.
+Run `cachepin diff a.json b.json --mode json --provider anthropic --json` on two request files. The output includes `raw_lcp_bytes` (literal shared bytes), `reason`, `divergence_path`, `raw_matched_tokens`, `opt_matched_tokens`, and `total_tokens`. Token counts are replay estimates. The input files stay on disk.
 
-## Verification & Reproducible Evidence
+- [Sample request A](https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/examples/prefix-diff/a.json)
+- [Sample request B](https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/examples/prefix-diff/b.json)
+- [Expected result and build instructions](https://github.com/pgg898200-ship-it/cachepin#try-a-pair-of-requests)
+- [Browser comparison](https://pgg898200-ship-it.github.io/cachepin/#compare)
 
-- [benchmarks/results.json](benchmarks/results.json): Machine-readable benchmark receipt (Rust+AVX2 84.2 µs P50 vs Node.js 22 290.3 µs vs Python 3.12 1,876.3 µs, 42.56 GB/s LCP, 219.4 µs live keep-alive proxy P50, 32->1 herd writes, 15.39x swarm savings, 8-GPU eviction-regime routing).
-- [scripts/verify.sh](scripts/verify.sh): One-command verification running zero-dep check, 64 Rust unit/property tests, 12-vector adversarial & live integration suite, and matched-control benchmarks.
-- [benchmarks/repro_all_gather_2604_03143.py](benchmarks/repro_all_gather_2604_03143.py): Standalone reproduction of arXiv:2604.03143 All-Gather collective prefix collapse.
-- [benchmarks/repro_thundering_herd.py](benchmarks/repro_thundering_herd.py): Standalone live 32-agent cold-start thundering-herd benchmark (32 -> 1 cold writes).
-- [benchmarks/repro_vllm_eviction_cliff.py](benchmarks/repro_vllm_eviction_cliff.py): Standalone 8-GPU vLLM eviction-regime routing comparison.
-- [tests/adversarial_suite.py](tests/adversarial_suite.py): 12 red-team & live integration vectors (prompt-injection sentinel spoofing, 500-deep JSON DoS, cross-tenant isolation, Anthropic mixed-TTL cap, 20-permutation drift, All-Gather convergence, live MCP, live HTTP proxy burst, 5,041 SIMD FFI parity checks, audit CLI, diff & Codex CLI forensics, live HTTP/1.1 keep-alive pooling & provider usage reconciliation).
+## Choose an entry point
 
-## Key Source Modules
-
-- [src/canonical.rs](src/canonical.rs): 4-pass lossless algebraic prefix compiler (ToolCanonicalize, bijective SIMD VolatileHoist, AllGatherAlign, ConfigGuard) + zero-reparse AST breakpoint injection.
-- [src/dp_planner.rs](src/dp_planner.rs): Exact O(M^2 K) constrained mixed-TTL (1h-before-5m, K<=4) dynamic program + 270s keepalive break-even rule.
-- [src/coalescer.rs](src/coalescer.rs): TTFT-triggered single-flight thundering-herd coalescer with fail-open RAII LeaderGuard.
-- [src/router.rs](src/router.rs): Replication-aware Shadow-KV adaptive radix router with O(1) per-backend bounded LRU.
-- [src/simd.rs](src/simd.rs): AVX2 (x86_64) & native NEON (aarch64) LCP diff, JSON special-byte scanner, 3-byte trigger scanner, SIMD BPE token estimator, and SipHash-2-4/1-3 tenant KDF.
-- [src/proxy.rs](src/proxy.rs): Multi-threaded HTTP/1.1 keep-alive + zero-buffer SSE + verified TLS reverse proxy with per-backend upstream pooling, live provider `usage` reconciliation, `/health`, `/stats`, `/metrics`, and `/dashboard`.
-- [src/audit.rs](src/audit.rs): Streaming JSONL trace auditor, native Claude Code & Codex CLI billing forensics, and `diff_two_requests` byte-level forensics.
-- [src/mcp.rs](src/mcp.rs): Native stdio Model Context Protocol (MCP) JSON-RPC 2.0 server exposing 5 tools.
-- [src/ffi.rs](src/ffi.rs) & [python/cachepin/__init__.py](python/cachepin/__init__.py): Panic-safe C-ABI shared library (`libcachepin.so`) and zero-dependency Python ctypes SDK.
-
-## Distribution & Interactive Showcase
-
-- [site/index.html](site/index.html): Zero-dependency interactive prompt diff playground, live benchmark explorer, and multi-agent swarm cost simulator (`https://pgg898200-ship-it.github.io/cachepin/`).
-- [server.json](server.json) & [mcpb/manifest.json](mcpb/manifest.json): Official Model Context Protocol (MCP) Registry manifest (`io.github.pgg898200-ship-it/cachepin`) and universal cross-platform `.mcpb` Desktop Extension.
-- [Dockerfile](Dockerfile), [Formula/cachepin.rb](Formula/cachepin.rb), [flake.nix](flake.nix): Multi-arch GHCR OCI image, Homebrew tap formula, and Nix Flake.
-- [.claude-plugin/plugin.json](.claude-plugin/plugin.json) & [skills/cachepin/SKILL.md](skills/cachepin/SKILL.md): Native Claude Code plugin and skill package.
-
-## Offline prefix-cache sizing
-
-[Prefix Atlas](https://github.com/pgg898200-ship-it/cachepin/tree/main/tools/prefix-atlas) calculates exact serial LRU prefix-hit curves from agent trace histories. The source includes the compact tree format, a tested GuideLLM replay exporter, public benchmark inputs and results for short and long traces. [Interactive cache budget calculator](https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/).
+- [CLI source and flags](https://github.com/pgg898200-ship-it/cachepin/blob/main/src/cli.rs). Use `audit` on a trace, `optimize` on one request, and `proxy` between the agent and upstream.
+- [MCP schemas and implementation](https://github.com/pgg898200-ship-it/cachepin/blob/main/src/mcp.rs). Start `cachepin mcp`, then use `tools/list` for the schemas of `diagnose_diff`, `optimize_prompt`, `audit_trace`, `plan_breakpoints`, and `route_simulate`.
+- [Integration guide](https://github.com/pgg898200-ship-it/cachepin/blob/main/docs/INTEGRATIONS.md). Configure a model API, vLLM/SGLang fleet, Python binding, or MCP client.
+- [Agent skill](https://github.com/pgg898200-ship-it/cachepin/blob/main/SKILL.md). Additional CLI and integration workflows.
+- [Algorithms](https://github.com/pgg898200-ship-it/cachepin/blob/main/docs/ALGORITHMS.md). Request normalization, cache-breakpoint placement, coalescing, and backend selection.
+- [Recorded measurements](https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/benchmarks/results.json). CPU and loopback timings are local measurements. Swarm cost and fleet latency figures come from workload replay.
