@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EdgeChime × Leaflet · Route zone changes</title>
+  <meta name="description" content="Move a point across two overlapping Leaflet zones and inspect the enter and exit events. A runnable example with no build step or map tiles.">
+  <link rel="canonical" href="https://pgg898200-ship-it.github.io/cachepin/edgechime/">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172e37; background: #f7f5ef; }
+    * { box-sizing: border-box; }
+    body { max-width: 49rem; margin: auto; padding: clamp(1rem, 4vw, 3rem); }
+    h1 { margin: 0 0 .4rem; font-size: clamp(2rem, 6vw, 3.25rem); letter-spacing: -.055em; line-height: 1.05; }
+    p { line-height: 1.55; }
+    a { color: #164e79; text-underline-offset: .14em; }
+    .brand { font-weight: 700; margin: 0 0 1rem; color: #32636b; }
+    #map { height: clamp(16rem, 39vh, 24rem); border: 1px solid #849494; background: #e9e8dc; }
+    .zones { display: flex; gap: 1rem; flex-wrap: wrap; padding: 0; list-style: none; font-size: .93rem; }
+    .zones li::before { content: ''; display: inline-block; width: .85em; height: .85em; margin-right: .4em; background: var(--zone-color); }
+    .controls { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
+    button { border: 1px solid #52656a; border-radius: .15rem; background: white; color: #172e37; padding: .55rem .75rem; font: inherit; cursor: pointer; }
+    button:hover, button:focus-visible { background: #d9e8e7; }
+    #status { display: block; padding: .8rem 1rem; border-left: .2rem solid #294e59; background: #edf0e8; font: 1rem/1.6 ui-monospace, monospace; }
+    footer { margin-top: 1.5rem; font-size: .94rem; }
+    code { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="brand">EdgeChime × Leaflet</p>
+    <h1>Which zone changed?</h1>
+    <p>Move a tracked point between Loading and Assembly. EdgeChime reports each zone the point entered or left since the previous sample.</p>
+  </header>
+  <main>
+    <div id="map" aria-label="Floor map with two overlapping work zones"></div>
+    <ul class="zones">
+      <li style="--zone-color:#286181">Loading</li>
+      <li style="--zone-color:#a74b23">Assembly</li>
+    </ul>
+    <div class="controls" aria-label="Move point to a sample">
+      <button disabled data-x="2" data-y="3">Loading only</button>
+      <button disabled data-x="6" data-y="3">Overlap</button>
+      <button disabled data-x="10" data-y="3">Assembly only</button>
+      <button disabled data-x="14" data-y="3">Outside</button>
+    </div>
+    <p>Choose a position or click the map. An edge on the right or top belongs to the space beyond a zone.</p>
+    <output id="status" aria-live="polite">Loading the map and zone index…</output>
+    <noscript><p>Enable JavaScript to try the map. The source and module are linked below.</p></noscript>
+  </main>
+  <footer><a href="https://github.com/pgg898200-ship-it/cachepin/blob/main/site/edgechime/index.html">View example source</a> · <a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/edgechime">EdgeChime API</a> · <a href="https://leafletjs.com/examples/crs-simple/">Leaflet coordinates</a></footer>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module">
+    const status = document.querySelector('#status');
+    try {
+      const { EdgeChime } = await import('https://cdn.jsdelivr.net/gh/pgg898200-ship-it/streamsieve@9121d2b93443dcf4e3faee1bfd27f8a6e9a21d48/edgechime/index.js');
+      const zones = [
+        { name: 'Loading', bounds: [0, 0, 8, 6], color: '#286181' },
+        { name: 'Assembly', bounds: [5, 1, 12, 7], color: '#a74b23' }
+      ];
+      const index = new EdgeChime(zones.map(zone => zone.bounds));
+      const map = L.map('map', { crs: L.CRS.Simple, scrollWheelZoom: false });
+      map.fitBounds([[-1, -1], [8, 15]], { padding: [10, 10] });
+      for (const { bounds: [left, bottom, right, top], color } of zones) {
+        L.rectangle([[bottom, left], [top, right]], { color, fillOpacity: 0.22, interactive: false }).addTo(map);
+      }
+
+      // Leaflet uses [y, x] in CRS.Simple. The index takes x, y.
+      let previous = { x: 2, y: 3 };
+      const dot = L.circleMarker([previous.y, previous.x], {
+        radius: 7, color: '#fff', weight: 2.5, fillColor: '#172e37', fillOpacity: 1, interactive: false
+      }).addTo(map);
+      const initial = [];
+      index.at(previous.x, previous.y, id => initial.push(zones[id].name));
+      status.textContent = 'Start (2, 3) · ' + initial.join(', ');
+
+      function move(x, y) {
+        const changes = [];
+        index.move(previous.x, previous.y, x, y, (id, entered) => {
+          changes.push((entered ? 'entered ' : 'left ') + zones[id].name);
+        });
+        dot.setLatLng([y, x]);
+        status.textContent = '(' + Number(x.toFixed(2)) + ', ' + Number(y.toFixed(2)) + ') · ' +
+          (changes.length ? changes.join(' · ') : 'no zone changes');
+        previous = { x, y };
+      }
+      map.on('click', event => move(event.latlng.lng, event.latlng.lat));
+      for (const button of document.querySelectorAll('button[data-x]')) {
+        button.disabled = false;
+        button.addEventListener('click', () => move(Number(button.dataset.x), Number(button.dataset.y)));
+      }
+    } catch (error) {
+      status.textContent = 'Could not load the map or zone index. Reload the page or open the example source.';
+      console.error(error);
+    }
+  </script>
+</body>
+</html>
