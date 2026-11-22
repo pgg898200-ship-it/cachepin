@@ -47,6 +47,7 @@ def main():
     p.add_argument("--capacities", required=True, help="comma-separated, all must fit longest request")
     p.add_argument("--one", required=True, type=int, help="single capacity also in the sweep")
     p.add_argument("--repeats", type=int, default=3)
+    p.add_argument("--direct-json", action="store_true", help="also time native PrefixSim direct from JSONL")
     args = p.parse_args()
     caps = sorted(set(map(int, args.capacities.split(","))))
     if args.one not in caps or args.repeats < 1:
@@ -91,12 +92,25 @@ def main():
             for cap, (hits, refs) in row["curve_counts"].items():
                 assert refs == row["sim_refs"][cap]
                 assert abs(hits / refs - row["sim_ratios"][cap]) <= 0.50001e-6
+            if args.direct_json:
+                times = {}
+                for cap, (hits, refs) in row["curve_counts"].items():
+                    ms, reported = prefixsim(args.prefixsim, args.jsonl, cap)
+                    if (int(reported["n_req_skipped"]) or int(reported["n_blocks"]) != refs
+                            or abs(hits / refs - float(reported["block_hit_ratio"])) > 0.50001e-6):
+                        raise ValueError(f"direct JSONL result differs at capacity {cap}")
+                    times[cap] = ms
+                row["sim_json_ms_by_capacity"] = times
+                row["sim_json_one_ms"] = times[args.one]
+                row["sim_json_sweep_ms"] = sum(times.values())
             trials.append(row)
             print(f"completed {i+1}/{args.repeats} for {args.jsonl.name}", file=sys.stderr, flush=True)
     metrics = ("tree_import_ms", "lcp_import_ms", "sim_one_ms", "sim_sweep_ms",
                "curve_one_ms", "curve_sweep_ms")
     med = {key: statistics.median(row[key] for row in trials) for key in metrics}
     for key in ("one", "sweep"):
+        if args.direct_json:
+            med[f"sim_json_{key}_ms"] = statistics.median(row[f"sim_json_{key}_ms"] for row in trials)
         med[f"{key}_speedup"] = med[f"sim_{key}_ms"] / med[f"curve_{key}_ms"]
         weighted = statistics.median(row["tree_import_ms"] + row[f"curve_{key}_ms"] for row in trials)
         sim = statistics.median(row["lcp_import_ms"] + row[f"sim_{key}_ms"] for row in trials)

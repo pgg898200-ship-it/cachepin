@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=74"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "Exact atomic prefix-cache capacity curves from shared LLM request histories"
 requires-python = ">=3.9"
 readme = "README-curve.md"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = []
 
 [project.urls]

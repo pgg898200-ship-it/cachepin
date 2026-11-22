@@ -7,6 +7,11 @@ from setuptools.command.bdist_wheel import bdist_wheel
 from setuptools.command.build_ext import build_ext
 
 
+# Build with the host toolchain even when Python was built on another machine.
+os.environ.setdefault("CC", "cc")
+os.environ.setdefault("CXX", "c++")
+
+
 class BuildAnalyzer(build_ext):
     def get_ext_filename(self, fullname):
         return os.path.join(*fullname.split("."))
@@ -15,7 +20,7 @@ class BuildAnalyzer(build_ext):
         target = Path(self.get_ext_fullpath(ext.name))
         target.parent.mkdir(parents=True, exist_ok=True)
         objects = self.compiler.compile(
-            ext.sources, output_dir=self.build_temp, extra_postargs=["-std=c++17", "-O3"]
+            ext.sources, output_dir=self.build_temp, extra_postargs=["-std=c++17", "-O3", "-g0"]
         )
         self.compiler.link_executable(objects, str(target), target_lang="c++")
 

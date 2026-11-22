@@ -1,0 +1,118 @@
+{
+  "cpus_in_affinity": 9,
+  "capacities": [
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192,
+    16384
+  ],
+  "trials": 3,
+  "reserve_mib": 256,
+  "formats": {
+    "lcp": {
+      "max_rss_kib_by_capacity": {
+        "256": 14208,
+        "512": 14336,
+        "1024": 14336,
+        "2048": 14336,
+        "4096": 14336,
+        "8192": 14336,
+        "16384": 14336
+      },
+      "measurements": [
+        {
+          "workers": 2,
+          "elapsed_ms": 293.703714,
+          "available_kib": 1417096
+        },
+        {
+          "workers": 7,
+          "elapsed_ms": 101.291255,
+          "available_kib": 1327680
+        },
+        {
+          "workers": 7,
+          "elapsed_ms": 102.068353,
+          "available_kib": 1302792
+        },
+        {
+          "workers": 2,
+          "elapsed_ms": 261.69814,
+          "available_kib": 1298364
+        },
+        {
+          "workers": 2,
+          "elapsed_ms": 254.333922,
+          "available_kib": 1271912
+        },
+        {
+          "workers": 7,
+          "elapsed_ms": 75.999094,
+          "available_kib": 1236980
+        }
+      ],
+      "median_ms": {
+        "2": 261.69814,
+        "7": 101.291255
+      },
+      "fastest_ms": {
+        "2": 254.333922,
+        "7": 75.999094
+      }
+    },
+    "jsonl": {
+      "max_rss_kib_by_capacity": {
+        "256": 19612,
+        "512": 19636,
+        "1024": 19652,
+        "2048": 19612,
+        "4096": 19660,
+        "8192": 19620,
+        "16384": 19616
+      },
+      "measurements": [
+        {
+          "workers": 2,
+          "elapsed_ms": 808.834591,
+          "available_kib": 1212892
+        },
+        {
+          "workers": 7,
+          "elapsed_ms": 300.418711,
+          "available_kib": 1246228
+        },
+        {
+          "workers": 7,
+          "elapsed_ms": 266.98506,
+          "available_kib": 1284484
+        },
+        {
+          "workers": 2,
+          "elapsed_ms": 920.40584,
+          "available_kib": 1276280
+        },
+        {
+          "workers": 2,
+          "elapsed_ms": 629.305557,
+          "available_kib": 1279624
+        },
+        {
+          "workers": 7,
+          "elapsed_ms": 245.725547,
+          "available_kib": 1301964
+        }
+      ],
+      "median_ms": {
+        "2": 808.834591,
+        "7": 266.98506
+      },
+      "fastest_ms": {
+        "2": 629.305557,
+        "7": 245.725547
+      }
+    }
+  }
+}

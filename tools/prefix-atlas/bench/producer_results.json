@@ -1,0 +1,12 @@
+{
+  "turns": 3000,
+  "trials": 5,
+  "expanded_page_ids": 4501500,
+  "tree_bytes": 33793,
+  "jsonl_bytes": 19843671,
+  "tree_sha256": "1f523ce01bd068267cc849ae3b1da4f69655e0213ae8301ebe98a9a55214845d",
+  "median_direct_seconds": 0.0028042210001331114,
+  "median_emit_jsonl_seconds": 0.23509474000002228,
+  "median_import_seconds": 1.593414448999738,
+  "median_emit_and_import_seconds": 1.8454270650004219
+}

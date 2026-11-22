@@ -1,0 +1,35 @@
+name: Prefix Atlas
+on:
+  push:
+    paths:
+      - 'tools/prefix-atlas/**'
+      - 'site/prefix-atlas/**'
+      - '.github/workflows/prefix-atlas.yml'
+  pull_request:
+    paths:
+      - 'tools/prefix-atlas/**'
+      - 'site/prefix-atlas/**'
+      - '.github/workflows/prefix-atlas.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/prefix-atlas
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify source, randomized oracles and archive integrity
+        run: make test
+      - name: Run the published Linux wheel
+        run: |
+          python -m pip install --no-index --find-links ../../site/prefix-atlas/dist prefix-atlas==0.1.0
+          prefix-atlas examples/freeinference-may17.tree --capacities 8822 | grep -Fx '8822,4547539,5684383'
+      - name: Verify calculator and website copy
+        run: |
+          cmp demo/index.html ../../site/prefix-atlas/index.html
+          python bench/check_browser.py

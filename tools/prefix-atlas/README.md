@@ -4,6 +4,24 @@
 
 Prefix Atlas computes an exact capacity curve from a tree of shared prompt histories. Long shared paths cost one operation per overlapping run. Developers can emit a fork as a parent, a number of new pages and a request tip, or import an existing Mooncake-format JSONL file. Run the tool offline with a C++17 compiler. The calculator works locally in a browser.
 
+## Install the CLI
+
+Linux x86-64 users with Python 3.9+ and glibc 2.17+ can install the 206 KiB wheel without a compiler:
+
+```sh
+python -m pip install --no-index --find-links https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/dist/ prefix-atlas==0.1.0
+```
+
+With Python 3.9+ and a C++17 compiler, install the package from GitHub. It has no Python runtime dependencies.
+
+```sh
+python -m pip install 'git+https://github.com/pgg898200-ship-it/cachepin.git#subdirectory=tools/prefix-atlas'
+prefix-atlas requests.jsonl --block-size 16 --capacities 8192,65536
+prefix-atlas requests.jsonl --block-size 16 --curve > capacity.csv
+```
+
+The [Hugging Face Space](https://huggingface.co/spaces/pgg-engineering/prefix-atlas) opens the two measured workloads and reads exported curves entirely in your browser.
+
 ## Try a real workload
 
 From this directory:
@@ -23,7 +41,7 @@ python3 mooncake.py --block-size 16 requests.jsonl > requests.tree
 ./curve --prefix-capacities 1024,4096,8192,65536 < requests.tree
 ```
 
-The importer accepts numeric timestamps, input lengths and integer hash lists, stable-sorts arrivals, and excludes partial blocks. A full curve records the exact hit count and slope at each breakpoint. It can answer new budgets without reprocessing the trace. A producer that already knows its fork and append history can write a tree directly. [Input format and algorithm](README-curve.md)
+The importer accepts numeric timestamps, input lengths and integer hash lists, stable-sorts arrivals, and excludes partial blocks. A full curve records the exact hit count and slope at each breakpoint. It can answer new budgets without reprocessing the trace. Workload generators can use `from prefix_atlas import TraceWriter` to record each known fork or append once, as it happens. On a synthetic 3,000-turn append-only session the writer emitted a 33,793-byte tree in 2.80 ms. Emitting cumulative JSONL and importing it took 1.845 s and produced the identical tree. This requires exact shared-prefix identities from the producer. [Producer benchmark](bench/producer_results.json) [Input format and algorithm](README-curve.md)
 
 ## What was measured
 
@@ -34,9 +52,11 @@ The importer accepts numeric timestamps, input lengths and integer hash lists, s
 | FreeInference, raw JSONL through seven-budget answer | 615.70 ms | 657.02 ms | 1.07× |
 | Mooncake tool/agent, raw JSONL through seven-budget answer | 273.67 ms | 255.40 ms | 0.93× |
 
-The two implementations emitted identical hit counts. Trials used the same machine, input and compiler flags. The native control calculates all requested budgets in one pass. On a synthetic singleton cycle it finished faster. Seven additional capacities on each real fixture matched the upstream PrefixSim native LRU implementation where every request fit in the cache. [Kernel measurements](bench/curve_benchmark.md) · [Import and end-to-end timings](bench/import_benchmark.md) · [Reproduce PrefixSim parity](bench/verify_prefixsim.py)
+A separate comparison used the unmodified upstream PrefixSim CLI. From normalized JSONL through **seven capacities**, Prefix Atlas took **644 ms versus 10.47 s** on FreeInference and **203 ms versus 740 ms** on Mooncake with the upstream jobs run sequentially. Both tools prepared their inputs once. With seven concurrent upstream processes, the fastest observed upstream route by median was 267 ms on Mooncake and an estimated 5.88 s on FreeInference. The FreeInference estimate adds separately measured conversion and execution medians. For **one** Mooncake capacity, PrefixSim's direct JSONL reader was faster at **131 ms versus 202 ms**. [Upstream comparison, commands and raw timings](bench/prefixsim_benchmark.md)
 
-This is a sizing model for serial, fully associative LRU. At arrival a request can reuse its longest contiguous resident prefix. On completion, the cache makes shallower blocks most recent. Pages, not requests, are the hit-rate denominator. Concurrency, in-flight pins, decode memory, sliding windows, routing and preemption require engine-specific measurements. To model separate tenants or model namespaces, analyze each isolated cache separately. PrefixSim supports additional cache policies. [Model details](README-curve.md) · [PrefixSim](https://github.com/cacheMon/PrefixSim)
+The two native implementations emitted identical hit counts. Trials used the same machine, input and compiler flags. The native control calculates all requested budgets in one pass. On a synthetic singleton cycle it finished faster. Seven additional capacities on each real fixture matched the upstream PrefixSim native LRU implementation where every request fit in the cache. [Kernel measurements](bench/curve_benchmark.md) · [Import and end-to-end timings](bench/import_benchmark.md) · [Reproduce PrefixSim parity](bench/verify_prefixsim.py)
+
+This is a sizing model for serial, fully associative LRU. At arrival a request can reuse its longest contiguous resident prefix. On completion, the cache makes shallower blocks most recent. The denominator is the count of referenced full pages. Concurrency, in-flight pins, decode memory, sliding windows, routing and preemption require engine-specific measurements. To model separate tenants or model namespaces, analyze each isolated cache separately. PrefixSim supports additional cache policies. [Model details](README-curve.md) · [PrefixSim](https://github.com/cacheMon/PrefixSim)
 
 ## Extract individual requests for downstream replay
 
@@ -62,4 +82,4 @@ python3 mooncake.py --block-size 512 /tmp/toolagent.jsonl > /tmp/toolagent.tree
 python3 bench/compare_curves.py --help
 ```
 
-Report a mismatch or an independent reproduction with the compiler, trace revision, block size, access model, capacities and expected output in [CachePin issues](https://github.com/pgg898200-ship-it/cachepin/issues). Code follows the parent CachePin project's licenses. The included FreeInference-derived example and its measurements include [source attribution](trace_sources.md).
+Report a mismatch or an independent reproduction with the compiler, trace revision, block size, access model, capacities and expected output in [CachePin issues](https://github.com/pgg898200-ship-it/cachepin/issues). The source is published under CachePin’s MIT license. The included FreeInference-derived example and its measurements include [source attribution](trace_sources.md).
