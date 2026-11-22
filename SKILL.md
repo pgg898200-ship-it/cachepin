@@ -1,82 +1,39 @@
 ---
 name: cachepin
-description: Diagnose, canonicalize, coalesce, and optimize multi-agent LLM prompt/KV caches losslessly across Anthropic, OpenAI, vLLM, and SGLang. Use when investigating low prompt-cache hit rates, high multi-agent token spend, cold-start swarm bursts, mixed 1h/5m TTL cache_control placement, or multi-GPU vLLM/SGLang prefix routing.
+description: Diagnose LLM prompt-cache misses in Anthropic or OpenAI-style request JSON. Use CachePin to compare two prompts, audit local Claude Code or Codex traces, normalize tool order, plan cache breakpoints, or simulate prefix routing across inference backends.
 ---
 
-# `cachepin` Agent Skill
+# CachePin
 
-`cachepin` is a zero-dependency Rust + AVX2/NEON SIMD binary (`~1.1 MB`), C-ABI library (`libcachepin.so`), Python SDK, HTTP/1.1 keep-alive reverse proxy, and native stdio MCP server that fixes multi-agent LLM prompt-cache collapse with **100% lossless** transformations.
+Start with the smallest input that reproduces the problem. Work from two request payloads to explain a single miss, or from a local JSONL trace to examine repeated requests.
 
-## When to Use `cachepin`
+## Compare two requests
 
-- Multi-agent swarms experiencing `<80%` prompt-cache hit rates or unexpected 5×–40× input token bills.
-- Non-deterministic MCP/SDK tool registration order, unsorted JSON schema keys, or early timestamps/UUIDs/`req_*` IDs invalidating prefixes.
-- All-Gather multi-agent rounds where agents share identical repo files/documents in different orders (*arXiv:2604.03143*).
-- Synchronized subagent bursts (`N` agents launching cold on the same prefix) causing `N` redundant cache writes.
-- Mixed-TTL (`1h` vs `5m`) Anthropic `cache_control` breakpoint planning (`<= 4` breakpoints, strict `1h`-before-`5m` monotonicity, `270s` keepalive break-even).
-- Multi-GPU vLLM / SGLang clusters suffering eviction-regime tail latency under single-home routing.
+Run the read-only CLI comparison from a checkout:
 
-## When NOT to Use `cachepin`
-
-- Requests shorter than provider minimum cache thresholds (`<512` tokens for Claude 5.5/5.1, `<1024` for Claude 4 / OpenAI).
-- One-off zero-reuse prompts (no follow-up turn within 5–60 minutes).
-- Workloads whose raw trace already exceeds `95%` cache hit rate (verify with `cachepin audit --auto` first).
-
-## Task-to-Command Quick Reference
-
-| Goal | Command / API |
-|---|---|
-| Install prebuilt binary (SHA-256 verified) | `curl -fsSL https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/scripts/install.sh \| sh` |
-| Build offline (0 external crates) | `cargo build --release` |
-| Auto-audit local Claude Code & Codex logs | `cachepin audit --auto` |
-| Audit Claude Code (`~/.claude/projects`) or Codex (`~/.codex/sessions`) | `cachepin audit --claude-code` / `cachepin audit --codex` |
-| Instant SIMD byte-level diff between 2 JSON requests | `cachepin diff agent_a.json agent_b.json [--json]` |
-| Audit any JSONL request trace or directory | `cachepin audit <trace.jsonl\|dir> --json` |
-| Optimize a single request JSON (stdin/file) | `cat req.json \| cachepin optimize --mode swarm` |
-| Start cloud API proxy (Anthropic / OpenAI) | `cachepin proxy --upstream https://api.anthropic.com --port 47820` |
-| Start multi-GPU vLLM/SGLang adaptive router | `cachepin proxy --backends http://g0:8000,http://g1:8000 --kv-tokens 131072 --policy adaptive` |
-| Start native stdio MCP server | `cachepin mcp` (or `docker run -i --rm ghcr.io/pgg898200-ship-it/cachepin:latest mcp`) |
-| List built-in late-2026 model pricing & cache geometry | `cachepin models` |
-| Run reproducible `[LIVE-CPU]` + `[SIM-TRACE]` benchmarks | `cachepin bench --json` |
-| Run full verification gate (64 unit + 12 red-team + controls) | `./scripts/verify.sh` |
-
-## Native MCP Tools (`cachepin mcp`)
-
-Configure in Claude Code / Codex / Cursor / Gemini CLI (also published to the Official MCP Registry as `io.github.pgg898200-ship-it/cachepin`):
-
-```json
-{
-  "mcpServers": {
-    "cachepin": {
-      "command": "cachepin",
-      "args": ["mcp"]
-    }
-  }
-}
+```sh
+cachepin diff examples/prefix-diff/a.json examples/prefix-diff/b.json --mode json --provider anthropic --json
 ```
 
-1. `optimize_prompt(payload, provider?, mode?, tenant_id?)` — Canonicalize request + solve exact $O(M^2 K)$ breakpoints + return lossless optimized JSON.
-2. `diagnose_diff(prev_payload, curr_payload, model?, provider?)` — SIMD byte-level prefix divergence offset + root-cause classification + counterfactual recovery.
-3. `plan_breakpoints(blocks, model?, provider?)` — Solve exact constrained mixed-TTL (`1h` before `5m`, `K <= 4`) breakpoints + 270s keepalive break-even.
-4. `audit_trace(path, mode?, provider?)` — Stream-audit a JSONL trace file or Claude Code / Codex directory for raw vs counterfactual hit rate, USD waste, and top cost-bleeding misses.
-5. `route_simulate(backends, requests, policy?)` — Compare `CachePinAdaptiveReplication` against Round-Robin, Least-Loaded, Consistent-Hash, and SingleHome-2xDivert.
+Read `raw_lcp_bytes` for the literal shared byte count. Read `reason` and `divergence_path` to locate the likely cause. Compare `raw_matched_tokens` and `opt_matched_tokens` for estimated reuse. The bundled pair yields `tool_order_drift` at `tools[0]`, with 68 shared input bytes and 0 versus 1,099 estimated matched tokens. Provider billing and tokenizer counts can differ from the replay.
 
-## Zero-Dependency Python SDK
+## Use MCP
 
-```python
-from cachepin import CachePin, lcp_len
+Configure the local stdio command `cachepin` with arguments `["mcp"]`. Send `tools/list` to obtain the schema for the installed version. Parse the JSON in the text content of each tool result.
 
-with CachePin(mode="swarm") as cp:
-    report = cp.compile_and_plan(payload_dict, tenant="org-1", provider="anthropic")
-    optimized_dict = cp.optimize_dict(payload_dict, tenant="org-1", provider="anthropic")
-```
+| Goal | Tool | Inputs |
+|---|---|---|
+| Compare request payloads | `diagnose_diff` | `prev_json` and `curr_json` hold the previous and current request. For byte offsets in the original JSON formatting, pass strings. |
+| Normalize a request | `optimize_prompt` | Pass `payload`. Set `mode` to `json` for key and tool ordering. Set `inject_breakpoints` to `false` to inspect just the transformed payload. |
+| Estimate caching breakpoints | `plan_breakpoints` | Pass `block_tokens` and `reuse_counts` arrays or supply the structured `blocks` accepted by the schema. |
+| Audit a local trace | `audit_trace` | Pass the trace `path` on the machine running the server. |
+| Compare simulated backend routing | `route_simulate` | Set `num_backends`, `num_requests`, and `kv_capacity_tokens` to match the scenario. |
 
-## Verified Performance Receipt (`benchmarks/results.json`, `v0.2.0`)
+## Use the CLI in a stack
 
-- **Compile latency (`18.5 KiB` payload, `[LIVE-CPU]`):** `84.2 µs` P50 / `138.4 µs` P99 (`22.3×` faster than Python 3.12, `3.45×` faster P50 / `8.91×` tighter P99 than Node.js 22 V8).
-- **AVX2 LCP diff (`[LIVE-CPU]`):** `42.56 GB/s` (`2,108×` faster than Python, `50.3×` faster than Node.js 22); native ARM64 NEON (`simd: neon`) on Apple Silicon & AWS Graviton.
-- **Exact DP solver (`[LIVE-CPU]`):** `8.04 µs` P50; exact match (`<1e-12`) against brute-force on 240 randomized trees.
-- **Live HTTP/1.1 keep-alive proxy overhead (`[LIVE-CPU]`):** `219.4 µs` P50 (`0.22 ms`) / `712.8 µs` P99 with warm upstream connection pooling & live provider `usage` reconciliation.
-- **Shadow-KV route decision (`[LIVE-CPU]`):** `1.16 µs` P50; cuts 8-GPU eviction-regime P99 TTFT by `37.0%` vs single-home 2×-divert (`260.0 ms` vs `413.0 ms`) `[SIM-TRACE]`.
-- **32-agent live cold-start herd (`[LIVE-CPU]`):** `32 → 1` cold cache writes (`-96.88%`).
-- **32-agent coding swarm (`[SIM-TRACE]`):** `2.24% → 98.44%` cache hit rate (`-93.50%` cost, `15.39×` cheaper).
+- Run `cachepin audit trace.jsonl --json` on a workload, or select local sessions with `--claude-code` or `--codex`.
+- Pipe request JSON to `cachepin optimize --mode json --no-breakpoints` to normalize keys and tool order. Inspect the output before passing it to a provider SDK.
+- Use `hoist` or `swarm` when volatile values or the order of shared blocks cause misses. Those modes change how context appears to the model. Evaluate outputs on representative requests.
+- Place the optional `cachepin proxy` between the agent and its upstream API. Use `cachepin proxy --help` for upstream, backend and coalescing flags.
+
+[Install the CLI and download sample inputs](https://github.com/pgg898200-ship-it/cachepin#install) · [Integration guide](https://github.com/pgg898200-ship-it/cachepin/blob/main/docs/INTEGRATIONS.md) · [Benchmark data](https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/benchmarks/results.json)
