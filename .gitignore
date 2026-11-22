@@ -1,0 +1,7 @@
+/target/
+*.pyc
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+*.log

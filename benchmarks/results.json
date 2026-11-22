@@ -1,0 +1,103 @@
+{
+  "evidence_note": "[LIVE-CPU] = measured live on this CPU; [SIM-TRACE] = deterministic workload/fleet replay.",
+  "payload_bytes": 18535,
+  "cross_language_controls_live_cpu": {
+    "cachepin_rust_native": {
+      "compile_p50_us": 195.27,
+      "compile_p99_us": 260.14,
+      "lcp_throughput_gb_s": 44.55,
+      "cli_cold_start_ms": 2.55
+    },
+    "cachepin_python_ffi": {
+      "compile_p50_us": 636.21,
+      "compile_p99_us": 1606.75,
+      "lcp_throughput_gb_s": 39.17
+    },
+    "node22_v8_control": {
+      "compile_p50_us": 282.15,
+      "compile_p99_us": 628.88,
+      "lcp_throughput_gb_s": 0.855,
+      "cli_cold_start_ms": 56.63
+    },
+    "python312_stdlib_control": {
+      "compile_p50_us": 1869.17,
+      "compile_p99_us": 2107.3,
+      "lcp_throughput_gb_s": 0.0207,
+      "cli_cold_start_ms": 36.31
+    },
+    "speedups_cachepin_rust": {
+      "compile_vs_python_x": 9.57,
+      "compile_vs_node22_x": 1.44,
+      "lcp_vs_python_x": 2155.0,
+      "lcp_vs_node22_x": 52.1,
+      "cold_start_vs_node22_x": 22.21,
+      "cold_start_vs_python_x": 14.24
+    }
+  },
+  "cachepin_full_suite": {
+    "simd_backend": "avx2",
+    "lcp_throughput_gb_s": 44.551,
+    "compile_p50_us": 195.271,
+    "compile_p99_us": 260.14,
+    "dp_p50_us": 7.805,
+    "dp_p99_us": 26.449,
+    "route_p50_us": 1.148,
+    "route_p99_us": 2.353,
+    "proxy_overhead_p50_us": 591.067,
+    "proxy_overhead_p99_us": 1233.413,
+    "herd_raw_writes": 32,
+    "herd_coalesced_writes": 1,
+    "herd_write_reduction_pct": 96.88,
+    "swarm32_raw_hit_pct": 2.25,
+    "swarm32_opt_hit_pct": 98.43,
+    "swarm32_cost_reduction_pct": 93.49,
+    "swarm32_cost_multiplier": 15.37,
+    "allgather_raw_hit_pct": 19.61,
+    "allgather_opt_hit_pct": 98.61,
+    "allgather_cost_reduction_pct": 93.42,
+    "dp_vs_uncached_savings_pct": 88.51,
+    "dp_vs_naive_single_bp_savings_pct": 88.59,
+    "eviction_routing": [
+      {
+        "policy": "Round-Robin",
+        "kv_hit_rate_pct": 51.12,
+        "p50_ttft_ms": 136.6,
+        "p99_ttft_ms": 443.0,
+        "mean_ttft_ms": 137.31,
+        "replications": 366
+      },
+      {
+        "policy": "Least-Loaded",
+        "kv_hit_rate_pct": 52.55,
+        "p50_ttft_ms": 106.0,
+        "p99_ttft_ms": 376.0,
+        "mean_ttft_ms": 119.13,
+        "replications": 355
+      },
+      {
+        "policy": "Consistent-Hash",
+        "kv_hit_rate_pct": 96.08,
+        "p50_ttft_ms": 16.8,
+        "p99_ttft_ms": 351.6,
+        "mean_ttft_ms": 72.89,
+        "replications": 0
+      },
+      {
+        "policy": "SingleHome-2xDivert (Ranvier-style)",
+        "kv_hit_rate_pct": 66.85,
+        "p50_ttft_ms": 14.4,
+        "p99_ttft_ms": 413.0,
+        "mean_ttft_ms": 89.71,
+        "replications": 180
+      },
+      {
+        "policy": "CachePin Adaptive-Replication",
+        "kv_hit_rate_pct": 87.52,
+        "p50_ttft_ms": 12.8,
+        "p99_ttft_ms": 260.0,
+        "mean_ttft_ms": 37.11,
+        "replications": 66
+      }
+    ]
+  }
+}

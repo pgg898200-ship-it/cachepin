@@ -1,0 +1,28 @@
+# cachepin
+
+> Zero-dependency Rust + AVX2 SIMD multi-agent LLM prompt-cache compiler, exact O(M^2 K) mixed-TTL breakpoint optimizer, TTFT-triggered single-flight thundering-herd coalescer, and replication-aware Shadow-KV radix router. 100% lossless; works with Anthropic, OpenAI, vLLM, and SGLang.
+
+## Core Documentation
+
+- [README.md](README.md): Overview, 30-second quickstart, verified [LIVE-CPU] and [SIM-TRACE] benchmarks, competitor matrix, and honest scope limits.
+- [SKILL.md](SKILL.md): Agent-first declarative workflow, CLI task table, MCP tool schemas, and zero-dependency Python SDK usage.
+- [docs/ALGORITHMS.md](docs/ALGORITHMS.md): Formal specification of bijective volatile hoisting, All-Gather collective alignment, exact O(M^2 K) mixed-TTL DP, TTFT single-flight coalescing, Shadow-KV adaptive routing, and AVX2 kernels.
+- [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md): Drop-in configuration for Claude Code, Codex, Anthropic Messages, OpenAI Chat/Responses, vLLM/SGLang fleets, MCP clients, and stacking with caveman/context-mode.
+
+## Verification & Reproducible Evidence
+
+- [benchmarks/results.json](benchmarks/results.json): Machine-readable benchmark receipt (Rust+AVX2 vs Python FFI vs Node.js 22 vs Python 3.12, live loopback proxy overhead, 32-agent thundering herd, swarm/All-Gather replays, 8-GPU eviction-regime routing).
+- [scripts/verify.sh](scripts/verify.sh): One-command verification running zero-dep check, 53 Rust unit/property tests, 10-vector adversarial suite, and matched-control benchmarks.
+- [tests/adversarial_suite.py](tests/adversarial_suite.py): 10 red-team & integration vectors (prompt-injection sentinel spoofing, 500-deep JSON DoS, cross-tenant isolation, Anthropic mixed-TTL cap, 20-permutation drift, All-Gather convergence, live MCP, live HTTP proxy burst, 5,041 AVX2 FFI parity checks, audit CLI counterfactual consistency).
+- [examples/demo_swarm.py](examples/demo_swarm.py): 30-second self-contained 32-agent swarm collapse & recovery demo.
+
+## Key Source Modules
+
+- [src/canonical.rs](src/canonical.rs): 4-pass lossless algebraic prefix compiler (ToolCanonicalize, bijective VolatileHoist, AllGatherAlign, ConfigGuard) + breakpoint injection.
+- [src/dp_planner.rs](src/dp_planner.rs): Exact O(M^2 K) constrained mixed-TTL (1h-before-5m, K<=4) dynamic program + 270s keepalive break-even rule.
+- [src/coalescer.rs](src/coalescer.rs): TTFT-triggered single-flight thundering-herd coalescer with fail-open RAII LeaderGuard.
+- [src/router.rs](src/router.rs): Replication-aware Shadow-KV adaptive radix router with O(1) per-backend bounded LRU.
+- [src/simd.rs](src/simd.rs): Runtime-dispatched AVX2 LCP diff, JSON special-byte scanner, fast BPE token estimator, and SipHash-2-4/1-3 tenant KDF.
+- [src/proxy.rs](src/proxy.rs): Multi-threaded HTTP/HTTPS/SSE reverse proxy with zero-buffering streaming, /health, /stats, /metrics, and /dashboard.
+- [src/mcp.rs](src/mcp.rs): Native stdio Model Context Protocol (MCP) JSON-RPC 2.0 server exposing 5 tools.
+- [src/ffi.rs](src/ffi.rs) & [python/cachepin/__init__.py](python/cachepin/__init__.py): Panic-safe C-ABI shared library (`libcachepin.so`) and zero-dependency Python ctypes SDK.

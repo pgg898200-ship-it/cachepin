@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cachepin"
+version = "0.1.0"
+description = "Sub-microsecond multi-agent LLM prompt-cache compiler, exact DP breakpoint optimizer, thundering-herd coalescer, and replication-aware radix router."
+readme = "README.md"
+license = { text = "MIT OR Apache-2.0" }
+requires-python = ">=3.9"
+keywords = ["llm", "prompt-cache", "kv-cache", "multi-agent", "anthropic", "openai", "vllm", "sglang"]
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["python"]
