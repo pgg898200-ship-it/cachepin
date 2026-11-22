@@ -188,6 +188,13 @@
       </div>
     </section>
 
+    <section aria-labelledby="mcp-heading">
+      <h2 id="mcp-heading">Compare requests in your MCP client</h2>
+      <p class="sec-desc">Open the CachePin bundle in a client that supports MCPB extensions on macOS or Linux (x86-64 or ARM64). Call <code>diagnose_diff</code> with two serialized requests, <code>prev_json</code> and <code>curr_json</code>. The tool runs locally and returns the byte offset where the requests first differ.</p>
+      <a class="jump" href="https://github.com/pgg898200-ship-it/cachepin/releases/download/v0.2.0/cachepin-mcp.mcpb">Download CachePin 0.2.0 (.mcpb)</a>
+      <a class="read" href="./server.json">Package details and SHA-256</a>
+    </section>
+
     <section>
       <h2>Estimate a cache bill</h2>
       <p class="sec-desc">Change the workload and compare two scenarios. The model assumes the normalized workload pays for one prefix write. Actual hits depend on your provider, timing and cache capacity.</p>
