@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-labelledby="title description">
+  <title id="title">Which zone changed? EdgeChime × Leaflet</title>
+  <desc id="description">The point moves from (2, 3) to (6, 3). It remains in Loading and enters Assembly.</desc>
+  <defs>
+    <pattern id="grid" width="42" height="42" x="113" y="536" patternUnits="userSpaceOnUse">
+      <path d="M 42 0 H 0 V 42" fill="none" stroke="#172e37" stroke-opacity=".16" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#f7f5ef"/>
+  <g font-family="DejaVu Sans, sans-serif" fill="#172e37">
+    <text x="58" y="73" fill="#32636b" font-size="32" font-weight="700">EdgeChime × Leaflet</text>
+    <text x="54" y="166" font-size="78" font-weight="700" letter-spacing="-4">Which zone changed?</text>
+
+    <rect x="56.5" y="211.5" width="655" height="363" fill="#e9e8dc" stroke="#849494"/>
+    <rect x="57" y="212" width="654" height="362" fill="url(#grid)"/>
+    <!-- The floor's origin is (113, 536) on the card. Each map unit spans 42 pixels. -->
+    <g id="geography" transform="translate(113 536) scale(42 -42)">
+      <rect id="loading" x="0" y="0" width="8" height="6" fill="#286181" fill-opacity=".22" stroke="#286181" stroke-width="3" vector-effect="non-scaling-stroke"/>
+      <rect id="assembly" x="5" y="1" width="7" height="6" fill="#a74b23" fill-opacity=".22" stroke="#a74b23" stroke-width="3" vector-effect="non-scaling-stroke"/>
+      <path d="M 2 3 H 6" fill="none" stroke="#172e37" stroke-width="4" vector-effect="non-scaling-stroke"/>
+      <path d="M 4.17 3.17 L 4.37 3 L 4.17 2.83" fill="none" stroke="#172e37" stroke-width="4" vector-effect="non-scaling-stroke"/>
+      <circle id="start" cx="2" cy="3" r=".18" fill="#f7f5ef" stroke="#172e37" stroke-width="3.5" vector-effect="non-scaling-stroke"/>
+      <circle id="end" cx="6" cy="3" r=".22" fill="#172e37" stroke="#fff" stroke-width="3" vector-effect="non-scaling-stroke"/>
+    </g>
+    <g font-size="29" font-weight="700">
+      <text x="132" y="326" fill="#204f68">Loading</text>
+      <text x="365" y="280" fill="#873c1c">Assembly</text>
+    </g>
+    <g font-family="DejaVu Sans Mono, monospace" font-size="25" text-anchor="middle">
+      <text x="197" y="453">(2, 3)</text>
+      <text x="365" y="453">(6, 3)</text>
+    </g>
+
+    <path d="M 761 282 V 500" stroke="#294e59" stroke-width="5"/>
+    <text x="790" y="312" font-size="29" fill="#32636b">At the overlap</text>
+    <text x="787" y="384" font-size="57" font-weight="700" letter-spacing="-2">entered</text>
+    <text x="787" y="447" font-size="57" font-weight="700" letter-spacing="-2">Assembly</text>
+    <text x="790" y="500" font-size="29">Still in Loading.</text>
+  </g>
+</svg>

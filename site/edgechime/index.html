@@ -6,6 +6,20 @@
   <title>EdgeChime × Leaflet · Route zone changes</title>
   <meta name="description" content="Move a point across two overlapping Leaflet zones and inspect the enter and exit events. A runnable example with no build step or map tiles.">
   <link rel="canonical" href="https://pgg898200-ship-it.github.io/cachepin/edgechime/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://pgg898200-ship-it.github.io/cachepin/edgechime/">
+  <meta property="og:title" content="Which zone changed? · EdgeChime × Leaflet">
+  <meta property="og:description" content="Move from (2, 3) to (6, 3). The point stays in Loading and enters Assembly. Try the two-zone floor map in Leaflet.">
+  <meta property="og:image" content="https://pgg898200-ship-it.github.io/cachepin/edgechime/route-preview.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="A point moves from (2, 3) inside Loading to (6, 3) where Loading and Assembly overlap. EdgeChime reports one event: entered Assembly.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Which zone changed? · EdgeChime × Leaflet">
+  <meta name="twitter:description" content="Move from (2, 3) to (6, 3). The point stays in Loading and enters Assembly. Try the two-zone floor map in Leaflet.">
+  <meta name="twitter:image" content="https://pgg898200-ship-it.github.io/cachepin/edgechime/route-preview.png">
+  <meta name="twitter:image:alt" content="A point moves from (2, 3) inside Loading to (6, 3) where Loading and Assembly overlap. EdgeChime reports one event: entered Assembly.">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
   <style>
     :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172e37; background: #f7f5ef; }
@@ -25,6 +39,7 @@
     footer { margin-top: 1.5rem; font-size: .94rem; }
     code { overflow-wrap: anywhere; }
   </style>
+  <noscript><style>#map, .zones, .controls, .map-help, #status { display: none; }</style></noscript>
 </head>
 <body>
   <header>
@@ -44,11 +59,11 @@
       <button disabled data-x="10" data-y="3">Assembly only</button>
       <button disabled data-x="14" data-y="3">Outside</button>
     </div>
-    <p>Choose a position or click the map. An edge on the right or top belongs to the space beyond a zone.</p>
+    <p class="map-help">Choose a position or click the map. An edge on the right or top belongs to the space beyond a zone.</p>
     <output id="status" aria-live="polite">Loading the map and zone index…</output>
-    <noscript><p>Enable JavaScript to try the map. The source and module are linked below.</p></noscript>
+    <noscript><p>At <code>(2, 3)</code> the point is in Loading. At <code>(6, 3)</code> it reaches the overlap and stays in Loading. EdgeChime reports one event, <strong>entered Assembly</strong>.</p></noscript>
   </main>
-  <footer><a href="https://github.com/pgg898200-ship-it/cachepin/blob/main/site/edgechime/index.html">View example source</a> · <a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/edgechime">EdgeChime API</a> · <a href="https://leafletjs.com/examples/crs-simple/">Leaflet coordinates</a></footer>
+  <footer><a href="https://github.com/pgg898200-ship-it/cachepin/blob/main/site/edgechime/index.html">View example source</a> · <a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/edgechime">EdgeChime API</a> · <a href="https://leafletjs.com/examples/crs-simple/">Leaflet coordinates</a> · <a href="https://github.com/pgg898200-ship-it/streamsieve/blob/main/edgechime/bench/gis/porto-crossing.geojson">Porto GPS sample (GeoJSON)</a></footer>
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module">
     const status = document.querySelector('#status');
