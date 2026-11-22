@@ -50,7 +50,16 @@ PYTHONPATH=python python3 -m cachepin.https_proxy \
 
 ## 3. Native MCP Server (Claude Code, Codex, Cursor, Gemini CLI, OpenCode)
 
-Add `cachepin mcp` to your MCP client config:
+With the [release executable](https://github.com/pgg898200-ship-it/cachepin/releases/latest) on your path, connect it to Claude Code in the current project.
+
+```sh
+claude mcp add --transport stdio --scope local cachepin -- cachepin mcp
+claude mcp get cachepin
+```
+
+The status should say `Connected`. To try it from a checkout, ask Claude to call `diagnose_diff` with the JSON objects from [a.json](../examples/prefix-diff/a.json) and [b.json](../examples/prefix-diff/b.json). In this example the first differing tool is `tools[0]`. The local estimate reports 1,099 recoverable prefix tokens.
+
+For a client that reads `mcpServers`, use the same executable and argument.
 
 ```json
 {
