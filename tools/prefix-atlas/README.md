@@ -24,6 +24,12 @@ prefix-atlas requests.jsonl --block-size 16 --curve > capacity.csv
 
 The [Hugging Face Space](https://huggingface.co/spaces/pgg-engineering/prefix-atlas) opens the two measured workloads and reads exported curves entirely in your browser.
 
+Ask a coding agent for the smallest page budget that meets a hit target. Install the [size-prefix-cache skill](https://github.com/pgg898200-ship-it/cachepin/tree/main/skills/size-prefix-cache) in your project:
+
+```sh
+npx skills add pgg898200-ship-it/cachepin --skill size-prefix-cache
+```
+
 ## Try a real workload
 
 From this directory:

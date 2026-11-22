@@ -6,6 +6,12 @@
 
 With the stop string `</tool>`, the chunk `hello </to` releases `hello ` immediately. The cursor identifies the withheld `</to` in the shared dictionary. If the next chunk is `ol>tail`, the stream stops after its third byte. If the next chunk is `ast`, the stream releases `</toast`. No caller-owned copy of the preceding chunk needs to survive.
 
+Replay a captured chat stream with a coding agent. Install the [audit-stop-stream skill](https://github.com/pgg898200-ship-it/cachepin/tree/main/skills/audit-stop-stream) in your project:
+
+```sh
+npx skills add pgg898200-ship-it/cachepin --skill audit-stop-stream
+```
+
 ## Measured performance
 
 A public GitHub Actions run compiled Cutstream and TurboSpark v0.7.1's original Rust matcher on an Intel Xeon 6975P-C. Both consumed the same chunks, materialized owned output strings and checked the bytes, frame boundaries and terminal flags against an independent oracle.
