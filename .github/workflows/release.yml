@@ -1,4 +1,4 @@
-name: Release Binaries
+name: Release Binaries, MCP Registry & GHCR
 
 on:
   push:
@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  packages: write
+  id-token: write
 
 jobs:
   build:
@@ -18,12 +20,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            mcpb_name: cachepin-linux-x86_64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+            mcpb_name: cachepin-linux-aarch64
           - os: macos-latest
             target: aarch64-apple-darwin
+            mcpb_name: cachepin-darwin-aarch64
           - os: macos-latest
             target: x86_64-apple-darwin
+            mcpb_name: cachepin-darwin-x86_64
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust stable
@@ -33,10 +39,12 @@ jobs:
       - name: Build zero-dependency release binary & C-ABI library
         run: |
           RUSTFLAGS="-D warnings" cargo build --release --target ${{ matrix.target }}
-      - name: Package release archive
+      - name: Package release tarball & MCPB binary slice
         run: |
-          mkdir -p dist
+          mkdir -p dist mcpb-bin
           cp target/${{ matrix.target }}/release/cachepin dist/
+          cp target/${{ matrix.target }}/release/cachepin "mcpb-bin/${{ matrix.mcpb_name }}"
+          chmod 0755 "mcpb-bin/${{ matrix.mcpb_name }}"
           for lib in target/${{ matrix.target }}/release/libcachepin.*; do
             [ -f "$lib" ] && cp "$lib" dist/ || true
           done
@@ -45,23 +53,140 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}
-          path: cachepin-*.tar.gz
+          path: |
+            cachepin-*.tar.gz
+            mcpb-bin/*
 
   publish:
+    name: Publish GitHub Release & Universal MCPB
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      mcpb_sha256: ${{ steps.mcpb.outputs.sha256 }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+      - name: Extract release version
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Assemble universal cross-platform MCPB Desktop Extension
+        id: mcpb
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          mkdir -p mcpb_stage/bin
+          jq --arg v "$VERSION" '.version = $v' mcpb/manifest.json > mcpb_stage/manifest.json
+          cp mcpb/cachepin-mcp mcpb_stage/bin/cachepin-mcp
+          cp artifacts/mcpb-bin/cachepin-* mcpb_stage/bin/
+          chmod 0755 mcpb_stage/bin/*
+          (cd mcpb_stage && zip -9 -r ../artifacts/cachepin-mcp.mcpb manifest.json bin/)
+          SHA="$(sha256sum artifacts/cachepin-mcp.mcpb | awk '{print $1}')"
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Built cachepin-mcp.mcpb (sha256=${SHA})"
       - name: Generate SHA256SUMS
         working-directory: artifacts
-        run: sha256sum cachepin-*.tar.gz > SHA256SUMS
+        run: sha256sum cachepin-*.tar.gz cachepin-mcp.mcpb > SHA256SUMS
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             artifacts/cachepin-*.tar.gz
+            artifacts/cachepin-mcp.mcpb
             artifacts/SHA256SUMS
+
+  publish-mcp-registry:
+    name: Publish to Official MCP Registry (OIDC)
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+      - name: Download and Sigstore-verify mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl --fail --location --silent --show-error --output "$archive" "$base_url/$archive"
+          curl --fail --location --silent --show-error --output "$archive.sigstore.json" "$base_url/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "$archive.sigstore.json"
+      - name: Stamp exact release version & MCPB SHA-256 into server.json
+        env:
+          REL_VER: ${{ needs.publish.outputs.version }}
+          REL_TAG: ${{ github.ref_name }}
+          MCPB_SHA: ${{ needs.publish.outputs.mcpb_sha256 }}
+        run: |
+          set -euo pipefail
+          jq --arg v "$REL_VER" \
+             --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${REL_TAG}/cachepin-mcp.mcpb" \
+             --arg sha "$MCPB_SHA" \
+             '.version = $v | .packages[0].identifier = $url | .packages[0].fileSha256 = $sha' \
+             server.json > server.json.tmp && mv server.json.tmp server.json
+          cat server.json
+          ./mcp-publisher validate
+      - name: Authenticate via GitHub OIDC and publish to Official MCP Registry
+        run: |
+          set -euo pipefail
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
+      - name: Verify live Official MCP Registry listing
+        run: |
+          set -euo pipefail
+          sleep 3
+          curl -fsSL "https://registry.modelcontextprotocol.io/v0.1/servers?search=cachepin" | grep -q "io.github.pgg898200-ship-it/cachepin"
+          echo "Verified live in Official MCP Registry!"
+
+  publish-ghcr:
+    name: Publish Multi-Arch OCI Image to GHCR
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Stage multi-arch native binaries
+        run: |
+          mkdir -p docker_bin
+          cp artifacts/mcpb-bin/cachepin-linux-x86_64 docker_bin/cachepin-amd64
+          cp artifacts/mcpb-bin/cachepin-linux-aarch64 docker_bin/cachepin-arm64
+          chmod 0755 docker_bin/cachepin-*
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push linux/amd64 + linux/arm64 OCI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.release
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/pgg898200-ship-it/cachepin:${{ needs.publish.outputs.version }}
+            ghcr.io/pgg898200-ship-it/cachepin:latest

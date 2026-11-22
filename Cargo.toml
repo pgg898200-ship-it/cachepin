@@ -1,6 +1,6 @@
 [package]
 name = "cachepin"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Sub-microsecond multi-agent LLM prompt-cache compiler, exact DP breakpoint optimizer, single-flight thundering-herd coalescer, and replication-aware radix router."
 license = "MIT OR Apache-2.0"

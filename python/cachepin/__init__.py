@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 _MODE_MAP = {
     "observe": 0,

@@ -18,6 +18,7 @@ RUSTFLAGS="-D warnings" cargo build --release
 echo "=== 3. Binary cold-start smoke & CLI surface ==="
 ./target/release/cachepin --version
 ./target/release/cachepin models >/dev/null
+./target/release/cachepin diff --help >/dev/null
 
 echo "=== 4. Adversarial red-team & Python SDK suite ==="
 python3 tests/adversarial_suite.py
@@ -28,7 +29,7 @@ test -s benchmarks/results.json
 echo "OK: benchmarks/results.json generated"
 
 echo "=== 6. Local path & secret hygiene check ==="
-if grep -rnEI --exclude-dir=__pycache__ '(/home/[a-zA-Z0-9_-]+|/Users/[a-zA-Z0-9_-]+|sk-ant-api[0-9a-zA-Z_-]{10,}|sk-proj-[0-9a-zA-Z_-]{10,})' src/ python/ benchmarks/ tests/ docs/ examples/ README.md SKILL.md llms.txt Cargo.toml pyproject.toml 2>/dev/null; then
+if grep -rnEI --exclude-dir=__pycache__ '(/home/[a-zA-Z0-9_-]+|/Users/[a-zA-Z0-9_-]+|sk-ant-api[0-9a-zA-Z_-]{10,}|sk-proj-[0-9a-zA-Z_-]{10,})' src/ python/ benchmarks/ tests/ docs/ examples/ site/ mcpb/ Formula/ Dockerfile Dockerfile.release flake.nix server.json README.md SKILL.md llms.txt Cargo.toml pyproject.toml 2>/dev/null; then
     echo "FAIL: local path or API key leaked into standalone repo"
     exit 1
 fi

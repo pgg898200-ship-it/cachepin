@@ -1,34 +1,38 @@
 # cachepin
 
-> Zero-dependency Rust + AVX2 SIMD multi-agent LLM prompt-cache compiler, exact O(M^2 K) mixed-TTL breakpoint optimizer, TTFT-triggered single-flight thundering-herd coalescer, and replication-aware Shadow-KV radix router. 100% lossless; works with Anthropic, OpenAI, vLLM, and SGLang.
+> Zero-dependency Rust + AVX2/NEON SIMD multi-agent LLM prompt-cache compiler, exact O(M^2 K) mixed-TTL breakpoint optimizer, TTFT-triggered single-flight thundering-herd coalescer, HTTP/1.1 keep-alive proxy, and replication-aware Shadow-KV radix router. 100% lossless; works with Anthropic, OpenAI, vLLM, SGLang, Claude Code, Codex, and MCP.
 
 ## Core Documentation
 
-- [README.md](README.md): Overview, 30-second quickstart, verified [LIVE-CPU] and [SIM-TRACE] benchmarks, competitor matrix, and honest scope limits.
-- [SKILL.md](SKILL.md): Agent-first declarative workflow, CLI task table, MCP tool schemas, and zero-dependency Python SDK usage.
-- [docs/ALGORITHMS.md](docs/ALGORITHMS.md): Formal specification of bijective volatile hoisting, All-Gather collective alignment, exact O(M^2 K) mixed-TTL DP, TTFT single-flight coalescing, Shadow-KV adaptive routing, and AVX2 kernels.
+- [README.md](README.md): Overview, 30-second quickstart (`curl | sh`, Homebrew, Nix, Docker/GHCR, offline Cargo), verified [LIVE-CPU] and [SIM-TRACE] benchmarks, SVG charts, competitor matrix, and honest scope limits.
+- [SKILL.md](SKILL.md): Agent-first declarative workflow (`npx skills add pgg898200-ship-it/cachepin`), CLI task table (`audit --auto/--claude-code/--codex`, `diff`, `proxy`, `optimize`, `mcp`, `bench`), MCP tool schemas, and zero-dependency Python SDK usage.
+- [docs/ALGORITHMS.md](docs/ALGORITHMS.md): Formal specification of bijective volatile hoisting, All-Gather collective alignment, exact O(M^2 K) mixed-TTL DP, TTFT single-flight coalescing, Shadow-KV adaptive routing, and AVX2/NEON SIMD kernels.
 - [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md): Drop-in configuration for Claude Code, Codex, Anthropic Messages, OpenAI Chat/Responses, vLLM/SGLang fleets, MCP clients, and stacking with caveman/context-mode.
 
 ## Verification & Reproducible Evidence
 
-- [benchmarks/results.json](benchmarks/results.json): Machine-readable benchmark receipt (Rust+AVX2 vs Python FFI vs Node.js 22 vs Python 3.12, live loopback proxy overhead, 32-agent thundering herd, swarm/All-Gather replays, 8-GPU eviction-regime routing).
-- [scripts/verify.sh](scripts/verify.sh): One-command verification running zero-dep check, 53 Rust unit/property tests, 10-vector adversarial suite, and matched-control benchmarks.
-- [tests/adversarial_suite.py](tests/adversarial_suite.py): 10 red-team & integration vectors (prompt-injection sentinel spoofing, 500-deep JSON DoS, cross-tenant isolation, Anthropic mixed-TTL cap, 20-permutation drift, All-Gather convergence, live MCP, live HTTP proxy burst, 5,041 AVX2 FFI parity checks, audit CLI counterfactual consistency).
-- [examples/demo_swarm.py](examples/demo_swarm.py): 30-second self-contained 32-agent swarm collapse & recovery demo.
+- [benchmarks/results.json](benchmarks/results.json): Machine-readable benchmark receipt (Rust+AVX2 84.2 µs P50 vs Node.js 22 290.3 µs vs Python 3.12 1,876.3 µs, 42.56 GB/s LCP, 219.4 µs live keep-alive proxy P50, 32->1 herd writes, 15.39x swarm savings, 8-GPU eviction-regime routing).
+- [scripts/verify.sh](scripts/verify.sh): One-command verification running zero-dep check, 64 Rust unit/property tests, 12-vector adversarial & live integration suite, and matched-control benchmarks.
+- [benchmarks/repro_all_gather_2604_03143.py](benchmarks/repro_all_gather_2604_03143.py): Standalone reproduction of arXiv:2604.03143 All-Gather collective prefix collapse.
+- [benchmarks/repro_thundering_herd.py](benchmarks/repro_thundering_herd.py): Standalone live 32-agent cold-start thundering-herd benchmark (32 -> 1 cold writes).
+- [benchmarks/repro_vllm_eviction_cliff.py](benchmarks/repro_vllm_eviction_cliff.py): Standalone 8-GPU vLLM eviction-regime routing comparison.
+- [tests/adversarial_suite.py](tests/adversarial_suite.py): 12 red-team & live integration vectors (prompt-injection sentinel spoofing, 500-deep JSON DoS, cross-tenant isolation, Anthropic mixed-TTL cap, 20-permutation drift, All-Gather convergence, live MCP, live HTTP proxy burst, 5,041 SIMD FFI parity checks, audit CLI, diff & Codex CLI forensics, live HTTP/1.1 keep-alive pooling & provider usage reconciliation).
 
 ## Key Source Modules
 
-- [src/canonical.rs](src/canonical.rs): 4-pass lossless algebraic prefix compiler (ToolCanonicalize, bijective VolatileHoist, AllGatherAlign, ConfigGuard) + breakpoint injection.
+- [src/canonical.rs](src/canonical.rs): 4-pass lossless algebraic prefix compiler (ToolCanonicalize, bijective SIMD VolatileHoist, AllGatherAlign, ConfigGuard) + zero-reparse AST breakpoint injection.
 - [src/dp_planner.rs](src/dp_planner.rs): Exact O(M^2 K) constrained mixed-TTL (1h-before-5m, K<=4) dynamic program + 270s keepalive break-even rule.
 - [src/coalescer.rs](src/coalescer.rs): TTFT-triggered single-flight thundering-herd coalescer with fail-open RAII LeaderGuard.
 - [src/router.rs](src/router.rs): Replication-aware Shadow-KV adaptive radix router with O(1) per-backend bounded LRU.
-- [src/simd.rs](src/simd.rs): Runtime-dispatched AVX2 LCP diff, JSON special-byte scanner, fast BPE token estimator, and SipHash-2-4/1-3 tenant KDF.
-- [src/proxy.rs](src/proxy.rs): Multi-threaded HTTP/HTTPS/SSE reverse proxy with zero-buffering streaming, /health, /stats, /metrics, and /dashboard.
+- [src/simd.rs](src/simd.rs): AVX2 (x86_64) & native NEON (aarch64) LCP diff, JSON special-byte scanner, 3-byte trigger scanner, SIMD BPE token estimator, and SipHash-2-4/1-3 tenant KDF.
+- [src/proxy.rs](src/proxy.rs): Multi-threaded HTTP/1.1 keep-alive + zero-buffer SSE + verified TLS reverse proxy with per-backend upstream pooling, live provider `usage` reconciliation, `/health`, `/stats`, `/metrics`, and `/dashboard`.
+- [src/audit.rs](src/audit.rs): Streaming JSONL trace auditor, native Claude Code & Codex CLI billing forensics, and `diff_two_requests` byte-level forensics.
 - [src/mcp.rs](src/mcp.rs): Native stdio Model Context Protocol (MCP) JSON-RPC 2.0 server exposing 5 tools.
 - [src/ffi.rs](src/ffi.rs) & [python/cachepin/__init__.py](python/cachepin/__init__.py): Panic-safe C-ABI shared library (`libcachepin.so`) and zero-dependency Python ctypes SDK.
 
 ## Distribution & Interactive Showcase
 
-- [site/index.html](site/index.html): Zero-dependency interactive benchmark explorer & multi-agent swarm cost simulator (GitHub Pages ready).
-- [server.json](server.json): Official Model Context Protocol (MCP) Registry server manifest.
+- [site/index.html](site/index.html): Zero-dependency interactive prompt diff playground, live benchmark explorer, and multi-agent swarm cost simulator (`https://pgg898200-ship-it.github.io/cachepin/`).
+- [server.json](server.json) & [mcpb/manifest.json](mcpb/manifest.json): Official Model Context Protocol (MCP) Registry manifest (`io.github.pgg898200-ship-it/cachepin`) and universal cross-platform `.mcpb` Desktop Extension.
+- [Dockerfile](Dockerfile), [Formula/cachepin.rb](Formula/cachepin.rb), [flake.nix](flake.nix): Multi-arch GHCR OCI image, Homebrew tap formula, and Nix Flake.
 - [.claude-plugin/plugin.json](.claude-plugin/plugin.json) & [skills/cachepin/SKILL.md](skills/cachepin/SKILL.md): Native Claude Code plugin and skill package.

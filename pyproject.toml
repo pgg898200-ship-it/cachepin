@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cachepin"
-version = "0.1.0"
+version = "0.2.0"
 description = "Sub-microsecond multi-agent LLM prompt-cache compiler, exact DP breakpoint optimizer, thundering-herd coalescer, and replication-aware radix router."
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }

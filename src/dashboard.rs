@@ -165,6 +165,58 @@ pub fn render_prometheus_metrics(
     out
 }
 
+/// Extended Prometheus exposition including live upstream provider-confirmed cache tokens
+/// and HTTP/1.1 upstream keep-alive pool reuse counters.
+pub fn render_prometheus_metrics_with_provider(
+    total_requests: u64,
+    cache_hit_tokens: u64,
+    total_input_tokens: u64,
+    saved_usd: f64,
+    compile_p50_us: f64,
+    compile_p99_us: f64,
+    coalescer: &CoalescerStats,
+    provider_confirmed_hit_tokens: u64,
+    provider_confirmed_write_tokens: u64,
+    upstream_pool_reuses: u64,
+) -> String {
+    let mut out = render_prometheus_metrics(
+        total_requests,
+        cache_hit_tokens,
+        total_input_tokens,
+        saved_usd,
+        compile_p50_us,
+        compile_p99_us,
+        coalescer,
+    );
+    let _ = writeln!(
+        out,
+        "# HELP cachepin_provider_confirmed_hit_tokens_total Upstream provider-reported cached read tokens."
+    );
+    let _ = writeln!(out, "# TYPE cachepin_provider_confirmed_hit_tokens_total counter");
+    let _ = writeln!(
+        out,
+        "cachepin_provider_confirmed_hit_tokens_total {}",
+        provider_confirmed_hit_tokens
+    );
+    let _ = writeln!(
+        out,
+        "# HELP cachepin_provider_confirmed_write_tokens_total Upstream provider-reported cache write tokens."
+    );
+    let _ = writeln!(out, "# TYPE cachepin_provider_confirmed_write_tokens_total counter");
+    let _ = writeln!(
+        out,
+        "cachepin_provider_confirmed_write_tokens_total {}",
+        provider_confirmed_write_tokens
+    );
+    let _ = writeln!(
+        out,
+        "# HELP cachepin_upstream_pool_reuses_total Warm HTTP/1.1 upstream keep-alive connections reused."
+    );
+    let _ = writeln!(out, "# TYPE cachepin_upstream_pool_reuses_total counter");
+    let _ = writeln!(out, "cachepin_upstream_pool_reuses_total {}", upstream_pool_reuses);
+    out
+}
+
 /// Returns the self-contained, zero-CDN HTML/CSS/JS live telemetry dashboard
 /// served by `cachepin proxy` at `/dashboard`.
 pub fn render_dashboard_html() -> &'static str {

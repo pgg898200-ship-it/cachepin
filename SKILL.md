@@ -5,11 +5,11 @@ description: Diagnose, canonicalize, coalesce, and optimize multi-agent LLM prom
 
 # `cachepin` Agent Skill
 
-`cachepin` is a zero-dependency Rust + AVX2 SIMD binary (`1.1 MB`), C-ABI library (`libcachepin.so`), Python SDK, HTTP/HTTPS/SSE reverse proxy, and native stdio MCP server that fixes multi-agent LLM prompt-cache collapse with **100% lossless** transformations.
+`cachepin` is a zero-dependency Rust + AVX2/NEON SIMD binary (`~1.1 MB`), C-ABI library (`libcachepin.so`), Python SDK, HTTP/1.1 keep-alive reverse proxy, and native stdio MCP server that fixes multi-agent LLM prompt-cache collapse with **100% lossless** transformations.
 
 ## When to Use `cachepin`
 
-- Multi-agent swarms experiencing `<80%` prompt-cache hit rates or unexpected 5×–20× input token bills.
+- Multi-agent swarms experiencing `<80%` prompt-cache hit rates or unexpected 5×–40× input token bills.
 - Non-deterministic MCP/SDK tool registration order, unsorted JSON schema keys, or early timestamps/UUIDs/`req_*` IDs invalidating prefixes.
 - All-Gather multi-agent rounds where agents share identical repo files/documents in different orders (*arXiv:2604.03143*).
 - Synchronized subagent bursts (`N` agents launching cold on the same prefix) causing `N` redundant cache writes.
@@ -20,26 +20,29 @@ description: Diagnose, canonicalize, coalesce, and optimize multi-agent LLM prom
 
 - Requests shorter than provider minimum cache thresholds (`<512` tokens for Claude 5.5/5.1, `<1024` for Claude 4 / OpenAI).
 - One-off zero-reuse prompts (no follow-up turn within 5–60 minutes).
-- Workloads whose raw trace already exceeds `95%` cache hit rate (verify with `cachepin audit` first).
+- Workloads whose raw trace already exceeds `95%` cache hit rate (verify with `cachepin audit --auto` first).
 
 ## Task-to-Command Quick Reference
 
 | Goal | Command / API |
 |---|---|
+| Install prebuilt binary (SHA-256 verified) | `curl -fsSL https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/main/scripts/install.sh \| sh` |
 | Build offline (0 external crates) | `cargo build --release` |
-| Audit local Claude Code sessions (`~/.claude/projects`) | `./target/release/cachepin audit --claude-code` |
-| Audit a JSONL request trace or directory | `./target/release/cachepin audit <trace.jsonl\|dir> --json` |
-| Optimize a single request JSON (stdin/file) | `cat req.json \| ./target/release/cachepin optimize --mode swarm` |
-| Start cloud API proxy (Anthropic / OpenAI) | `./target/release/cachepin proxy --upstream https://api.anthropic.com --port 47820` |
-| Start multi-GPU vLLM/SGLang adaptive router | `./target/release/cachepin proxy --backends http://g0:8000,http://g1:8000 --kv-tokens 131072 --policy adaptive` |
-| Start native stdio MCP server | `./target/release/cachepin mcp` |
-| List built-in late-2026 model pricing & cache geometry | `./target/release/cachepin models` |
-| Run reproducible `[LIVE-CPU]` + `[SIM-TRACE]` benchmarks | `./target/release/cachepin bench --json` |
-| Run full verification gate (53 unit + 10 red-team + controls) | `./scripts/verify.sh` |
+| Auto-audit local Claude Code & Codex logs | `cachepin audit --auto` |
+| Audit Claude Code (`~/.claude/projects`) or Codex (`~/.codex/sessions`) | `cachepin audit --claude-code` / `cachepin audit --codex` |
+| Instant SIMD byte-level diff between 2 JSON requests | `cachepin diff agent_a.json agent_b.json [--json]` |
+| Audit any JSONL request trace or directory | `cachepin audit <trace.jsonl\|dir> --json` |
+| Optimize a single request JSON (stdin/file) | `cat req.json \| cachepin optimize --mode swarm` |
+| Start cloud API proxy (Anthropic / OpenAI) | `cachepin proxy --upstream https://api.anthropic.com --port 47820` |
+| Start multi-GPU vLLM/SGLang adaptive router | `cachepin proxy --backends http://g0:8000,http://g1:8000 --kv-tokens 131072 --policy adaptive` |
+| Start native stdio MCP server | `cachepin mcp` (or `docker run -i --rm ghcr.io/pgg898200-ship-it/cachepin:latest mcp`) |
+| List built-in late-2026 model pricing & cache geometry | `cachepin models` |
+| Run reproducible `[LIVE-CPU]` + `[SIM-TRACE]` benchmarks | `cachepin bench --json` |
+| Run full verification gate (64 unit + 12 red-team + controls) | `./scripts/verify.sh` |
 
 ## Native MCP Tools (`cachepin mcp`)
 
-Configure in Claude Code / Codex / Cursor / Gemini CLI:
+Configure in Claude Code / Codex / Cursor / Gemini CLI (also published to the Official MCP Registry as `io.github.pgg898200-ship-it/cachepin`):
 
 ```json
 {
@@ -53,9 +56,9 @@ Configure in Claude Code / Codex / Cursor / Gemini CLI:
 ```
 
 1. `optimize_prompt(payload, provider?, mode?, tenant_id?)` — Canonicalize request + solve exact $O(M^2 K)$ breakpoints + return lossless optimized JSON.
-2. `diagnose_diff(prev_payload, curr_payload, model?, provider?)` — AVX2 byte-level prefix divergence offset + root-cause classification + counterfactual recovery.
+2. `diagnose_diff(prev_payload, curr_payload, model?, provider?)` — SIMD byte-level prefix divergence offset + root-cause classification + counterfactual recovery.
 3. `plan_breakpoints(blocks, model?, provider?)` — Solve exact constrained mixed-TTL (`1h` before `5m`, `K <= 4`) breakpoints + 270s keepalive break-even.
-4. `audit_trace(path, mode?, provider?)` — Stream-audit a JSONL trace file for raw vs counterfactual hit rate, USD waste, and top cost-bleeding misses.
+4. `audit_trace(path, mode?, provider?)` — Stream-audit a JSONL trace file or Claude Code / Codex directory for raw vs counterfactual hit rate, USD waste, and top cost-bleeding misses.
 5. `route_simulate(backends, requests, policy?)` — Compare `CachePinAdaptiveReplication` against Round-Robin, Least-Loaded, Consistent-Hash, and SingleHome-2xDivert.
 
 ## Zero-Dependency Python SDK
@@ -68,11 +71,12 @@ with CachePin(mode="swarm") as cp:
     optimized_dict = cp.optimize_dict(payload_dict, tenant="org-1", provider="anthropic")
 ```
 
-## Verified Performance Receipt (`benchmarks/results.json`)
+## Verified Performance Receipt (`benchmarks/results.json`, `v0.2.0`)
 
-- **Compile latency (`18.5 KiB` payload, `[LIVE-CPU]`):** `195.3 µs` P50 / `260.1 µs` P99 (`9.57×` faster than Python 3.12, `1.44×` faster P50 / `2.42×` tighter P99 than Node.js 22 V8).
-- **AVX2 LCP diff (`[LIVE-CPU]`):** `44.55 GB/s` (`2,155×` faster than Python, `52.1×` faster than Node.js 22).
-- **Exact DP solver (`[LIVE-CPU]`):** `7.81 µs` P50; exact match (`<1e-12`) against brute-force on 240 randomized trees.
-- **Shadow-KV route decision (`[LIVE-CPU]`):** `1.15 µs` P50; cuts 8-GPU eviction-regime P99 TTFT by `37.0%` vs single-home 2×-divert (`260.0 ms` vs `413.0 ms`) `[SIM-TRACE]`.
+- **Compile latency (`18.5 KiB` payload, `[LIVE-CPU]`):** `84.2 µs` P50 / `138.4 µs` P99 (`22.3×` faster than Python 3.12, `3.45×` faster P50 / `8.91×` tighter P99 than Node.js 22 V8).
+- **AVX2 LCP diff (`[LIVE-CPU]`):** `42.56 GB/s` (`2,108×` faster than Python, `50.3×` faster than Node.js 22); native ARM64 NEON (`simd: neon`) on Apple Silicon & AWS Graviton.
+- **Exact DP solver (`[LIVE-CPU]`):** `8.04 µs` P50; exact match (`<1e-12`) against brute-force on 240 randomized trees.
+- **Live HTTP/1.1 keep-alive proxy overhead (`[LIVE-CPU]`):** `219.4 µs` P50 (`0.22 ms`) / `712.8 µs` P99 with warm upstream connection pooling & live provider `usage` reconciliation.
+- **Shadow-KV route decision (`[LIVE-CPU]`):** `1.16 µs` P50; cuts 8-GPU eviction-regime P99 TTFT by `37.0%` vs single-home 2×-divert (`260.0 ms` vs `413.0 ms`) `[SIM-TRACE]`.
 - **32-agent live cold-start herd (`[LIVE-CPU]`):** `32 → 1` cold cache writes (`-96.88%`).
-- **32-agent coding swarm (`[SIM-TRACE]`):** `2.25% → 98.43%` cache hit rate (`-93.49%` cost, `15.37×` cheaper).
+- **32-agent coding swarm (`[SIM-TRACE]`):** `2.24% → 98.44%` cache hit rate (`-93.50%` cost, `15.39×` cheaper).

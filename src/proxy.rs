@@ -1,8 +1,9 @@
 //! Zero-dependency multi-threaded HTTP/1.1 reverse proxy with:
-//!   - Tenant-isolated algebraic prefix canonicalization + exact DP `cache_control` injection
+//!   - Tenant-isolated algebraic prefix canonicalization + zero-reparse exact DP `cache_control` injection
 //!   - TTFT-triggered single-flight thundering-herd coalescing (leader wakes followers on first upstream header!)
+//!   - Per-backend HTTP/1.1 keep-alive upstream connection pool + persistent client keep-alive
 //!   - Replication-aware Shadow-KV multi-backend routing for self-hosted vLLM/SGLang fleets
-//!   - Zero-buffering SSE / chunked pass-through streaming
+//!   - Zero-buffering SSE / chunked pass-through streaming + non-blocking upstream provider `usage` reconciliation
 //!   - Live `/health`, `/stats`, `/metrics` (Prometheus), and zero-CDN `/dashboard`.
 
 use std::collections::HashMap;
@@ -13,15 +14,20 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::canonical::{apply_breakpoints_to_json, CompilerConfig, PrefixCompiler};
+use crate::canonical::{apply_breakpoints_to_value, CompilerConfig, PrefixCompiler};
 use crate::coalescer::{FlightRole, SingleFlightCoalescer};
-use crate::dashboard::{render_dashboard_html, render_prometheus_metrics};
+use crate::dashboard::{render_dashboard_html, render_prometheus_metrics_with_provider};
 use crate::dp_planner::solve_optimal_breakpoints;
+use crate::json::{estimate_serialized_len, serialize_json};
 use crate::pricing::lookup_pricing;
 use crate::radix::PrefixRadixTree;
 use crate::router::{BackendConfig, RoutingPolicy, ShadowKvRouter};
 use crate::simd::{derive_tenant_key, keyed_hash64};
 use crate::types::{CanonicalMode, MissReason, ProviderFormat};
+
+const MAX_POOLED_PER_BACKEND: usize = 32;
+const MAX_POOLED_IDLE_SECS: u64 = 25;
+const USAGE_TAIL_LIMIT: usize = 8192;
 
 #[derive(Debug, Clone)]
 pub struct ProxyConfig {
@@ -76,6 +82,9 @@ pub struct ProxyTelemetry {
     pub total_requests: AtomicU64,
     pub cache_hit_tokens: AtomicU64,
     pub total_input_tokens: AtomicU64,
+    pub provider_confirmed_hit_tokens: AtomicU64,
+    pub provider_confirmed_write_tokens: AtomicU64,
+    pub upstream_pool_reuses: AtomicU64,
     pub total_saved_micro_usd: AtomicU64,
     pub total_wasted_micro_usd: AtomicU64,
     pub tools_reordered: AtomicU64,
@@ -94,6 +103,9 @@ impl ProxyTelemetry {
             total_requests: AtomicU64::new(0),
             cache_hit_tokens: AtomicU64::new(0),
             total_input_tokens: AtomicU64::new(0),
+            provider_confirmed_hit_tokens: AtomicU64::new(0),
+            provider_confirmed_write_tokens: AtomicU64::new(0),
+            upstream_pool_reuses: AtomicU64::new(0),
             total_saved_micro_usd: AtomicU64::new(0),
             total_wasted_micro_usd: AtomicU64::new(0),
             tools_reordered: AtomicU64::new(0),
@@ -139,7 +151,31 @@ pub struct ProxyState {
     pub router: Mutex<ShadowKvRouter>,
     pub telemetry: ProxyTelemetry,
     pub upstreams_parsed: Vec<ParsedUpstream>,
+    pub upstream_pools: Vec<Mutex<Vec<(TcpStream, Instant)>>>,
     pub tenant_secret: [u8; 16],
+}
+
+impl ProxyState {
+    fn pop_pooled_upstream(&self, backend_idx: usize) -> Option<TcpStream> {
+        let pool = self.upstream_pools.get(backend_idx)?;
+        let mut guard = pool.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        while let Some((stream, saved_at)) = guard.pop() {
+            if now.saturating_duration_since(saved_at).as_secs() < MAX_POOLED_IDLE_SECS {
+                return Some(stream);
+            }
+        }
+        None
+    }
+
+    fn return_pooled_upstream(&self, backend_idx: usize, stream: TcpStream) {
+        if let Some(pool) = self.upstream_pools.get(backend_idx) {
+            let mut guard = pool.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.len() < MAX_POOLED_PER_BACKEND {
+                guard.push((stream, Instant::now()));
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -216,6 +252,7 @@ pub fn start_proxy_background(config: ProxyConfig) -> Result<ProxyHandle, String
     }
     let mut parsed = Vec::with_capacity(config.upstreams.len());
     let mut backend_cfgs = Vec::with_capacity(config.upstreams.len());
+    let mut pools = Vec::with_capacity(config.upstreams.len());
     for (idx, u) in config.upstreams.iter().enumerate() {
         let pu = ParsedUpstream::parse(u)?;
         backend_cfgs.push(BackendConfig {
@@ -227,6 +264,7 @@ pub fn start_proxy_background(config: ProxyConfig) -> Result<ProxyHandle, String
             max_inflight: 64,
         });
         parsed.push(pu);
+        pools.push(Mutex::new(Vec::with_capacity(MAX_POOLED_PER_BACKEND)));
     }
 
     let listener = TcpListener::bind(&config.listen_addr)
@@ -250,6 +288,7 @@ pub fn start_proxy_background(config: ProxyConfig) -> Result<ProxyHandle, String
         router: Mutex::new(ShadowKvRouter::new(backend_cfgs, config.routing_policy)),
         telemetry: ProxyTelemetry::new(),
         upstreams_parsed: parsed,
+        upstream_pools: pools,
         tenant_secret,
         config,
     });
@@ -301,10 +340,13 @@ struct ParsedHttpRequest {
     version: String,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
+    client_wants_keep_alive: bool,
 }
 
-fn read_http_request(stream: &mut TcpStream, max_body: usize) -> Result<ParsedHttpRequest, String> {
-    let mut reader = BufReader::new(stream.try_clone().map_err(|e| e.to_string())?);
+fn read_http_request(
+    reader: &mut BufReader<TcpStream>,
+    max_body: usize,
+) -> Result<ParsedHttpRequest, String> {
     let mut req_line = String::new();
     let n = reader.read_line(&mut req_line).map_err(|e| e.to_string())?;
     if n == 0 {
@@ -318,9 +360,11 @@ fn read_http_request(stream: &mut TcpStream, max_body: usize) -> Result<ParsedHt
     let target = parts[1].to_string();
     let version = parts[2].to_string();
 
-    let mut headers = Vec::new();
+    let mut headers = Vec::with_capacity(12);
     let mut content_length: usize = 0;
     let mut chunked = false;
+    let mut conn_close = false;
+    let mut conn_keep_alive = false;
     loop {
         let mut line = String::new();
         let m = reader.read_line(&mut line).map_err(|e| e.to_string())?;
@@ -336,10 +380,23 @@ fn read_http_request(stream: &mut TcpStream, max_body: usize) -> Result<ParsedHt
                 && val.to_ascii_lowercase().contains("chunked")
             {
                 chunked = true;
+            } else if key.eq_ignore_ascii_case("connection") {
+                let low = val.to_ascii_lowercase();
+                if low.contains("close") {
+                    conn_close = true;
+                } else if low.contains("keep-alive") {
+                    conn_keep_alive = true;
+                }
             }
             headers.push((key, val));
         }
     }
+
+    let client_wants_keep_alive = if version.eq_ignore_ascii_case("HTTP/1.1") {
+        !conn_close
+    } else {
+        conn_keep_alive && !conn_close
+    };
 
     let mut body = Vec::new();
     if chunked {
@@ -380,6 +437,7 @@ fn read_http_request(stream: &mut TcpStream, max_body: usize) -> Result<ParsedHt
         version,
         headers,
         body,
+        client_wants_keep_alive,
     })
 }
 
@@ -388,12 +446,15 @@ fn write_simple_response(
     status: &str,
     content_type: &str,
     body: &[u8],
+    keep_alive: bool,
 ) -> Result<(), String> {
+    let conn = if keep_alive { "keep-alive" } else { "close" };
     let hdr = format!(
-        "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n",
+        "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: {}\r\nCache-Control: no-store\r\n\r\n",
         status,
         content_type,
-        body.len()
+        body.len(),
+        conn
     );
     stream.write_all(hdr.as_bytes()).map_err(|e| e.to_string())?;
     stream.write_all(body).map_err(|e| e.to_string())?;
@@ -405,6 +466,15 @@ fn build_stats_json(state: &ProxyState) -> String {
     let total_reqs = state.telemetry.total_requests.load(Ordering::Relaxed);
     let hit_toks = state.telemetry.cache_hit_tokens.load(Ordering::Relaxed);
     let total_toks = state.telemetry.total_input_tokens.load(Ordering::Relaxed);
+    let prov_hit = state
+        .telemetry
+        .provider_confirmed_hit_tokens
+        .load(Ordering::Relaxed);
+    let prov_write = state
+        .telemetry
+        .provider_confirmed_write_tokens
+        .load(Ordering::Relaxed);
+    let pool_reuses = state.telemetry.upstream_pool_reuses.load(Ordering::Relaxed);
     let hit_rate = if total_toks > 0 {
         (hit_toks as f64 / total_toks as f64) * 100.0
     } else {
@@ -420,6 +490,10 @@ fn build_stats_json(state: &ProxyState) -> String {
     out.push_str(&format!(
         "\"total_requests\":{},\"cache_hit_tokens\":{},\"total_input_tokens\":{},\"cache_hit_rate_pct\":{:.2},\"saved_usd\":{:.6},\"wasted_usd\":{:.6},",
         total_reqs, hit_toks, total_toks, hit_rate, saved_usd, wasted_usd
+    ));
+    out.push_str(&format!(
+        "\"provider_confirmed\":{{\"hit_tokens\":{},\"write_tokens\":{},\"upstream_pool_reuses\":{}}},",
+        prov_hit, prov_write, pool_reuses
     ));
     out.push_str(&format!(
         "\"compile_p50_us\":{:.2},\"compile_p99_us\":{:.2},\"upstream_errors\":{},",
@@ -465,45 +539,143 @@ fn build_stats_json(state: &ProxyState) -> String {
     out
 }
 
-fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), String> {
+/// Append streamed response bytes to a bounded rolling tail for non-blocking
+/// post-stream provider `usage` extraction (zero extra latency on client path).
+#[inline]
+fn capture_usage_tail(tail: &mut Vec<u8>, chunk: &[u8]) {
+    if chunk.is_empty() {
+        return;
+    }
+    if chunk.len() >= USAGE_TAIL_LIMIT {
+        tail.clear();
+        tail.extend_from_slice(&chunk[chunk.len() - USAGE_TAIL_LIMIT..]);
+        return;
+    }
+    if tail.len() + chunk.len() > USAGE_TAIL_LIMIT {
+        let drop_n = (tail.len() + chunk.len()) - USAGE_TAIL_LIMIT;
+        tail.drain(0..drop_n);
+    }
+    tail.extend_from_slice(chunk);
+}
+
+/// Fast zero-panic byte extractor for real upstream provider-confirmed cache read/write tokens
+/// from JSON or SSE response tails (`cache_read_input_tokens`, `cache_creation_input_tokens`, `cached_tokens`).
+pub(crate) fn extract_provider_usage_tokens(buf: &[u8]) -> (u64, u64) {
+    fn find_last_u64_field(hay: &[u8], key: &[u8]) -> Option<u64> {
+        if hay.len() < key.len() + 2 {
+            return None;
+        }
+        let mut best: Option<u64> = None;
+        let mut i = 0usize;
+        while i + key.len() <= hay.len() {
+            if &hay[i..i + key.len()] == key {
+                let mut j = i + key.len();
+                while j < hay.len() && matches!(hay[j], b' ' | b'\t' | b'\r' | b'\n') {
+                    j += 1;
+                }
+                if j < hay.len() && hay[j] == b':' {
+                    j += 1;
+                    while j < hay.len() && matches!(hay[j], b' ' | b'\t' | b'\r' | b'\n') {
+                        j += 1;
+                    }
+                    let start = j;
+                    let mut val: u64 = 0;
+                    while j < hay.len() && hay[j].is_ascii_digit() {
+                        val = val.saturating_mul(10).saturating_add((hay[j] - b'0') as u64);
+                        j += 1;
+                    }
+                    if j > start {
+                        best = Some(val);
+                    }
+                }
+                i += key.len();
+            } else {
+                i += 1;
+            }
+        }
+        best
+    }
+
+    let anth_hit = find_last_u64_field(buf, b"\"cache_read_input_tokens\"");
+    let anth_write = find_last_u64_field(buf, b"\"cache_creation_input_tokens\"").unwrap_or(0);
+    let hit = anth_hit
+        .or_else(|| find_last_u64_field(buf, b"\"cached_tokens\""))
+        .unwrap_or(0);
+    (hit, anth_write)
+}
+
+fn handle_client(client: TcpStream, state: Arc<ProxyState>) -> Result<(), String> {
     let _ = client.set_nodelay(true);
     let _ = client.set_read_timeout(Some(Duration::from_secs(30)));
-    let req = match read_http_request(&mut client, state.config.max_body_bytes) {
-        Ok(r) => r,
-        Err(_) => return Ok(()),
-    };
+    let mut writer = client.try_clone().map_err(|e| e.to_string())?;
+    let mut reader = BufReader::with_capacity(16 * 1024, client);
+    let mut req_num = 0usize;
 
+    loop {
+        if req_num > 0 {
+            let _ = reader
+                .get_ref()
+                .set_read_timeout(Some(Duration::from_secs(5)));
+        }
+        let req = match read_http_request(&mut reader, state.config.max_body_bytes) {
+            Ok(r) => r,
+            Err(_) => break,
+        };
+        req_num += 1;
+        let keep_alive_client = req.client_wants_keep_alive;
+        let keep_open = handle_single_request(req, &mut writer, &state, keep_alive_client)?;
+        if !keep_open || !keep_alive_client {
+            break;
+        }
+    }
+
+    let _ = writer.shutdown(Shutdown::Both);
+    Ok(())
+}
+
+fn handle_single_request(
+    req: ParsedHttpRequest,
+    client: &mut TcpStream,
+    state: &ProxyState,
+    keep_alive_client: bool,
+) -> Result<bool, String> {
     // Built-in observability endpoints
     if req.method == "GET" {
         match req.target.split('?').next().unwrap_or("") {
             "/health" => {
-                return write_simple_response(
-                    &mut client,
+                write_simple_response(
+                    client,
                     "200 OK",
                     "application/json",
                     b"{\"status\":\"ok\",\"engine\":\"cachepin\"}",
-                );
+                    keep_alive_client,
+                )?;
+                return Ok(keep_alive_client);
             }
             "/dashboard" | "/" => {
-                return write_simple_response(
-                    &mut client,
+                write_simple_response(
+                    client,
                     "200 OK",
                     "text/html; charset=utf-8",
                     render_dashboard_html().as_bytes(),
-                );
+                    keep_alive_client,
+                )?;
+                return Ok(keep_alive_client);
             }
             "/stats" => {
-                let body = build_stats_json(&state);
-                return write_simple_response(
-                    &mut client,
+                let body = build_stats_json(state);
+                write_simple_response(
+                    client,
                     "200 OK",
                     "application/json",
                     body.as_bytes(),
-                );
+                    keep_alive_client,
+                )?;
+                return Ok(keep_alive_client);
             }
             "/metrics" => {
                 let (p50, p99) = state.telemetry.latency_percentiles();
-                let body = render_prometheus_metrics(
+                let body = render_prometheus_metrics_with_provider(
                     state.telemetry.total_requests.load(Ordering::Relaxed),
                     state.telemetry.cache_hit_tokens.load(Ordering::Relaxed),
                     state.telemetry.total_input_tokens.load(Ordering::Relaxed),
@@ -511,13 +683,24 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
                     p50,
                     p99,
                     &state.coalescer.stats(),
+                    state
+                        .telemetry
+                        .provider_confirmed_hit_tokens
+                        .load(Ordering::Relaxed),
+                    state
+                        .telemetry
+                        .provider_confirmed_write_tokens
+                        .load(Ordering::Relaxed),
+                    state.telemetry.upstream_pool_reuses.load(Ordering::Relaxed),
                 );
-                return write_simple_response(
-                    &mut client,
+                write_simple_response(
+                    client,
                     "200 OK",
                     "text/plain; version=0.0.4",
                     body.as_bytes(),
-                );
+                    keep_alive_client,
+                )?;
+                return Ok(keep_alive_client);
             }
             _ => {}
         }
@@ -542,7 +725,7 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             || req.target.contains("/responses")
             || req.target.contains("/completions"));
 
-    let mut forward_body = req.body.clone();
+    let mut forward_body_opt: Option<Vec<u8>> = None;
     let mut selected_backend: usize = 0;
     let mut leader_guard = None;
     let mut pending_leader_commit: Option<(
@@ -553,7 +736,7 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
     )> = None;
     let mut waited_ms: u64 = 0;
     let mut est_prefill_tokens: u32 = 0;
-    let mut extra_headers: Vec<(String, String)> = Vec::new();
+    let mut extra_headers: Vec<(String, String)> = Vec::with_capacity(8);
     let ts_now = now_ms();
 
     if is_llm_post {
@@ -569,7 +752,12 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             }
         });
 
-        if let Ok(compiled) = state.compiler.compile_request(tenant_id, &req.body, provider_hint) {
+        let emit_canon = state.config.mode == CanonicalMode::ObserveOnly;
+        if let Ok((compiled, mut ast)) =
+            state
+                .compiler
+                .compile_request_with_ast(tenant_id, &req.body, provider_hint, emit_canon)
+        {
             let compile_us = compiled.compile_ns as f64 / 1000.0;
             state.telemetry.record_latency(compile_us);
             state.telemetry.total_requests.fetch_add(1, Ordering::Relaxed);
@@ -581,14 +769,20 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
                 state.telemetry.tools_reordered.fetch_add(1, Ordering::Relaxed);
             }
             if compiled.json_keys_reordered {
-                state.telemetry.json_keys_reordered.fetch_add(1, Ordering::Relaxed);
+                state
+                    .telemetry
+                    .json_keys_reordered
+                    .fetch_add(1, Ordering::Relaxed);
             }
             state
                 .telemetry
                 .volatile_hoisted
                 .fetch_add(compiled.volatile_spans_hoisted as u64, Ordering::Relaxed);
             if compiled.all_gather_reordered {
-                state.telemetry.all_gather_reordered.fetch_add(1, Ordering::Relaxed);
+                state
+                    .telemetry
+                    .all_gather_reordered
+                    .fetch_add(1, Ordering::Relaxed);
             }
 
             let pricing = lookup_pricing(&compiled.model, compiled.provider);
@@ -599,8 +793,6 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             ]);
 
             // 1. TTFT-triggered single-flight thundering-herd coalescing (BEFORE radix/DP!).
-            //    Elects 1 cold Leader while parking N-1 Followers until Leader commits upstream
-            //    prefill + warm radix breakpoints, guaranteeing identical breakpoints & 1 cold write.
             let model_hash = keyed_hash64(&tk_bytes, compiled.model.as_bytes());
             let flight_key = SingleFlightCoalescer::compute_flight_key(
                 tenant_u64,
@@ -608,7 +800,9 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
                 compiled.shared_prefix_hash,
             );
             let mut follower_warmed = false;
-            if state.config.enable_coalescing && compiled.total_est_tokens >= pricing.min_cache_tokens {
+            if state.config.enable_coalescing
+                && compiled.total_est_tokens >= pricing.min_cache_tokens
+            {
                 match state.coalescer.acquire(flight_key, now_ms()) {
                     FlightRole::Leader(guard) => {
                         leader_guard = Some(guard);
@@ -639,10 +833,14 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
                     compiled.volatile_spans_hoisted,
                     compiled.all_gather_reordered,
                 );
-                let reuse = rx.estimate_reuse_profile(tenant_u64, &compiled.model, &compiled.blocks, lookup_now);
+                let reuse = rx.estimate_reuse_profile(
+                    tenant_u64,
+                    &compiled.model,
+                    &compiled.blocks,
+                    lookup_now,
+                );
                 let p = solve_optimal_breakpoints(&compiled.blocks, &reuse, &pricing);
                 if leader_guard.is_some() {
-                    // Defer radix warm commit until upstream confirms TTFT 200 OK.
                     pending_leader_commit = Some((
                         tenant_u64,
                         compiled.model.clone(),
@@ -669,22 +867,20 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
                 0
             };
 
-            // 3. Rewrite payload with canonical JSON + optimal breakpoints
+            // 3. Zero-reparse breakpoint injection directly onto the compiled AST!
             if state.config.mode != CanonicalMode::ObserveOnly {
                 let cache_key = format!("cp-{:016x}", compiled.shared_prefix_hash);
                 if state.config.inject_breakpoints && !plan.breakpoints.is_empty() {
-                    if let Ok(rewritten) = apply_breakpoints_to_json(
-                        &compiled.canonical_json,
+                    forward_body_opt = Some(apply_breakpoints_to_value(
+                        &mut ast,
                         compiled.provider,
                         &plan,
                         Some(&cache_key),
-                    ) {
-                        forward_body = rewritten;
-                    } else {
-                        forward_body = compiled.canonical_json.clone();
-                    }
+                    ));
                 } else {
-                    forward_body = compiled.canonical_json.clone();
+                    let mut buf = Vec::with_capacity(estimate_serialized_len(&ast) + 32);
+                    serialize_json(&ast, &mut buf);
+                    forward_body_opt = Some(buf);
                 }
             }
 
@@ -713,7 +909,8 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             }
 
             // Record telemetry
-            let effective_matched = (diag.matched_tokens + coalesced_hit_bonus).min(compiled.total_est_tokens);
+            let effective_matched =
+                (diag.matched_tokens + coalesced_hit_bonus).min(compiled.total_est_tokens);
             let saved_usd = (pricing.cost_input(effective_matched as u64)
                 - pricing.cost_read(effective_matched as u64))
             .max(0.0);
@@ -780,13 +977,17 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
         }
     }
 
-    // Forward upstream with zero-buffering SSE pass-through.
-    // Plain HTTP upstreams (vLLM/SGLang/Ollama/local gateways) use raw zero-overhead TCP.
-    // HTTPS cloud upstreams (api.anthropic.com, api.openai.com) use verified TLS via `openssl s_client`
-    // with strict hostname validation and all headers/keys piped strictly over stdin (never in argv).
-    let upstream = &state.upstreams_parsed[selected_backend % state.upstreams_parsed.len()];
+    let forward_body: &[u8] = forward_body_opt.as_deref().unwrap_or(&req.body);
+    let backend_idx = selected_backend % state.upstreams_parsed.len();
+    let upstream = &state.upstreams_parsed[backend_idx];
 
-    let mut out_hdr = format!("{} {} {}\r\n", req.method, req.target, req.version);
+    let mut out_hdr = String::with_capacity(512);
+    out_hdr.push_str(&req.method);
+    out_hdr.push(' ');
+    out_hdr.push_str(&req.target);
+    out_hdr.push(' ');
+    out_hdr.push_str(&req.version);
+    out_hdr.push_str("\r\n");
     for (k, v) in &req.headers {
         if k.eq_ignore_ascii_case("host")
             || k.eq_ignore_ascii_case("content-length")
@@ -795,11 +996,20 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
         {
             continue;
         }
-        out_hdr.push_str(&format!("{}: {}\r\n", k, v));
+        out_hdr.push_str(k);
+        out_hdr.push_str(": ");
+        out_hdr.push_str(v);
+        out_hdr.push_str("\r\n");
     }
-    out_hdr.push_str(&format!("Host: {}\r\n", upstream.host_header));
-    out_hdr.push_str(&format!("Content-Length: {}\r\n", forward_body.len()));
-    out_hdr.push_str("Connection: close\r\n\r\n");
+    out_hdr.push_str("Host: ");
+    out_hdr.push_str(&upstream.host_header);
+    out_hdr.push_str("\r\nContent-Length: ");
+    out_hdr.push_str(&forward_body.len().to_string());
+    if upstream.is_tls {
+        out_hdr.push_str("\r\nConnection: close\r\n\r\n");
+    } else {
+        out_hdr.push_str("\r\nConnection: keep-alive\r\n\r\n");
+    }
 
     let t_up = Instant::now();
     if upstream.is_tls {
@@ -812,12 +1022,14 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
         if !valid_host {
             state.telemetry.upstream_errors.fetch_add(1, Ordering::Relaxed);
             drop(leader_guard);
-            return write_simple_response(
-                &mut client,
+            write_simple_response(
+                client,
                 "400 Bad Request",
                 "application/json",
                 b"{\"error\":\"invalid upstream hostname\"}",
-            );
+                false,
+            )?;
+            return Ok(false);
         }
         let connect_arg = format!("{}:{}", upstream.host, upstream.port);
         let mut child = match std::process::Command::new("openssl")
@@ -843,24 +1055,33 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
                 state.telemetry.upstream_errors.fetch_add(1, Ordering::Relaxed);
                 drop(leader_guard);
                 let msg = format!("{{\"error\":\"openssl TLS bridge unavailable: {}\"}}", e);
-                return write_simple_response(&mut client, "502 Bad Gateway", "application/json", msg.as_bytes());
+                write_simple_response(
+                    client,
+                    "502 Bad Gateway",
+                    "application/json",
+                    msg.as_bytes(),
+                    false,
+                )?;
+                return Ok(false);
             }
         };
         if let Some(mut stdin) = child.stdin.take() {
             if stdin.write_all(out_hdr.as_bytes()).is_err()
-                || stdin.write_all(&forward_body).is_err()
+                || stdin.write_all(forward_body).is_err()
                 || stdin.flush().is_err()
             {
                 state.telemetry.upstream_errors.fetch_add(1, Ordering::Relaxed);
                 drop(leader_guard);
                 let _ = child.kill();
                 let _ = child.wait();
-                return write_simple_response(
-                    &mut client,
+                write_simple_response(
+                    client,
                     "502 Bad Gateway",
                     "application/json",
                     b"{\"error\":\"TLS upstream write failed\"}",
-                );
+                    false,
+                )?;
+                return Ok(false);
             }
         }
         let stdout = match child.stdout.take() {
@@ -870,12 +1091,14 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
                 drop(leader_guard);
                 let _ = child.kill();
                 let _ = child.wait();
-                return write_simple_response(
-                    &mut client,
+                write_simple_response(
+                    client,
                     "502 Bad Gateway",
                     "application/json",
                     b"{\"error\":\"TLS upstream stdout missing\"}",
-                );
+                    false,
+                )?;
+                return Ok(false);
             }
         };
         let mut up_reader = BufReader::new(stdout);
@@ -885,12 +1108,14 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             drop(leader_guard);
             let _ = child.kill();
             let _ = child.wait();
-            return write_simple_response(
-                &mut client,
+            write_simple_response(
+                client,
                 "502 Bad Gateway",
                 "application/json",
                 b"{\"error\":\"empty TLS upstream response\"}",
-            );
+                false,
+            )?;
+            return Ok(false);
         }
         let ttft_ms = t_up.elapsed().as_secs_f64() * 1000.0;
         let is_2xx = status_line.contains(" 200 ") || status_line.contains(" 201 ");
@@ -919,13 +1144,19 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             resp_hdr.push_str(&format!("{}: {}\r\n", k, v));
         }
         resp_hdr.push_str("\r\n");
-        client.write_all(resp_hdr.as_bytes()).map_err(|e| e.to_string())?;
+        client
+            .write_all(resp_hdr.as_bytes())
+            .map_err(|e| e.to_string())?;
         client.flush().map_err(|e| e.to_string())?;
         let mut buf = [0u8; 8192];
+        let mut usage_tail = Vec::new();
         loop {
             match up_reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
+                    if is_llm_post && is_2xx {
+                        capture_usage_tail(&mut usage_tail, &buf[..n]);
+                    }
                     if client.write_all(&buf[..n]).is_err() {
                         break;
                     }
@@ -935,54 +1166,90 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             }
         }
         let _ = child.wait();
+        if is_llm_post && is_2xx && !usage_tail.is_empty() {
+            let (hit, wr) = extract_provider_usage_tokens(&usage_tail);
+            if hit > 0 {
+                state
+                    .telemetry
+                    .provider_confirmed_hit_tokens
+                    .fetch_add(hit, Ordering::Relaxed);
+            }
+            if wr > 0 {
+                state
+                    .telemetry
+                    .provider_confirmed_write_tokens
+                    .fetch_add(wr, Ordering::Relaxed);
+            }
+        }
         if state.upstreams_parsed.len() > 1 {
             if let Ok(mut rt) = state.router.lock() {
                 rt.complete(selected_backend, est_prefill_tokens, 64, ttft_ms);
             }
         }
-        let _ = client.shutdown(Shutdown::Both);
-        return Ok(());
+        return Ok(false);
     }
 
+    // Plain HTTP upstream with warm keep-alive connection pool + fresh-connect retry fallback.
     let addr = format!("{}:{}", upstream.host, upstream.port);
     let timeout = Duration::from_millis(state.config.upstream_timeout_ms);
     let mut connected_reader: Option<(BufReader<TcpStream>, String)> = None;
     let mut last_err = "empty upstream response".to_string();
 
-    // Retry transient pre-header connect/reset/EOF errors (e.g. small upstream listen() backlog
-    // during synchronized burst wakeups) strictly before any response bytes are read.
-    for attempt in 0..3u32 {
-        if attempt > 0 {
-            thread::sleep(Duration::from_millis(5 * (attempt as u64)));
+    // Fast path: reuse a warm pooled keep-alive socket (zero TCP handshake!)
+    if let Some(mut pooled) = state.pop_pooled_upstream(backend_idx) {
+        let _ = pooled.set_read_timeout(Some(timeout));
+        let _ = pooled.set_write_timeout(Some(timeout));
+        if pooled.write_all(out_hdr.as_bytes()).is_ok()
+            && pooled.write_all(forward_body).is_ok()
+            && pooled.flush().is_ok()
+        {
+            let mut reader = BufReader::with_capacity(16 * 1024, pooled);
+            let mut first_line = String::new();
+            if matches!(reader.read_line(&mut first_line), Ok(n) if n > 0) {
+                state
+                    .telemetry
+                    .upstream_pool_reuses
+                    .fetch_add(1, Ordering::Relaxed);
+                connected_reader = Some((reader, first_line));
+            }
         }
-        let mut up_stream = match TcpStream::connect(&addr) {
-            Ok(s) => s,
-            Err(e) => {
-                last_err = format!("upstream connect failed: {}", e);
+    }
+
+    // Fallback: fresh TCP connect with 3-attempt transient pre-header retry.
+    if connected_reader.is_none() {
+        for attempt in 0..3u32 {
+            if attempt > 0 {
+                thread::sleep(Duration::from_millis(5 * (attempt as u64)));
+            }
+            let mut up_stream = match TcpStream::connect(&addr) {
+                Ok(s) => s,
+                Err(e) => {
+                    last_err = format!("upstream connect failed: {}", e);
+                    continue;
+                }
+            };
+            let _ = up_stream.set_nodelay(true);
+            let _ = up_stream.set_read_timeout(Some(timeout));
+            let _ = up_stream.set_write_timeout(Some(timeout));
+
+            if up_stream.write_all(out_hdr.as_bytes()).is_err()
+                || up_stream.write_all(forward_body).is_err()
+                || up_stream.flush().is_err()
+            {
+                last_err = "upstream write failed".to_string();
                 continue;
             }
-        };
-        let _ = up_stream.set_nodelay(true);
-        let _ = up_stream.set_read_timeout(Some(timeout));
-        let _ = up_stream.set_write_timeout(Some(timeout));
 
-        if up_stream.write_all(out_hdr.as_bytes()).is_err()
-            || up_stream.write_all(&forward_body).is_err()
-            || up_stream.flush().is_err()
-        {
-            last_err = "upstream write failed".to_string();
-            continue;
-        }
-
-        let mut reader = BufReader::new(up_stream);
-        let mut first_line = String::new();
-        match reader.read_line(&mut first_line) {
-            Ok(n) if n > 0 => {
-                connected_reader = Some((reader, first_line));
-                break;
-            }
-            _ => {
-                last_err = "empty upstream response".to_string();
+            let mut reader = BufReader::with_capacity(16 * 1024, up_stream);
+            let mut first_line = String::new();
+            match reader.read_line(&mut first_line) {
+                Ok(n) if n > 0 => {
+                    connected_reader = Some((reader, first_line));
+                    break;
+                }
+                _ => {
+                    last_err = "empty upstream response".to_string();
+                }
             }
         }
     }
@@ -993,7 +1260,14 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             state.telemetry.upstream_errors.fetch_add(1, Ordering::Relaxed);
             drop(leader_guard);
             let msg = format!("{{\"error\":\"{}\"}}", last_err.replace('"', "\\\""));
-            return write_simple_response(&mut client, "502 Bad Gateway", "application/json", msg.as_bytes());
+            write_simple_response(
+                client,
+                "502 Bad Gateway",
+                "application/json",
+                msg.as_bytes(),
+                false,
+            )?;
+            return Ok(false);
         }
     };
 
@@ -1001,8 +1275,6 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
     let is_2xx = status_line.contains(" 200 ") || status_line.contains(" 201 ");
     if let Some(guard) = leader_guard.take() {
         if is_2xx {
-            // Commit warm breakpoints to radix BEFORE waking followers so every follower
-            // observes identical warm TTL & breakpoints with zero write churn!
             let commit_now = now_ms();
             if let Some((t_u64, mdl, blks, bps)) = pending_leader_commit.take() {
                 let mut rx = state.radix.lock().unwrap_or_else(|e| e.into_inner());
@@ -1014,34 +1286,200 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
         }
     }
 
-    let mut resp_hdr = status_line;
+    let mut resp_hdr = String::with_capacity(512);
+    let up_is_http10 = status_line.starts_with("HTTP/1.0");
+    resp_hdr.push_str(&status_line);
+    let mut up_content_length: Option<usize> = None;
+    let mut up_chunked = false;
+    let mut up_close = up_is_http10;
     loop {
         let mut line = String::new();
         let n = up_reader.read_line(&mut line).map_err(|e| e.to_string())?;
         if n == 0 || line == "\r\n" || line == "\n" {
             break;
         }
+        if let Some((k, v)) = line.split_once(':') {
+            let kt = k.trim();
+            let vt = v.trim();
+            if kt.eq_ignore_ascii_case("content-length") {
+                if let Ok(len) = vt.parse::<usize>() {
+                    up_content_length = Some(len);
+                }
+            } else if kt.eq_ignore_ascii_case("transfer-encoding")
+                && vt.to_ascii_lowercase().contains("chunked")
+            {
+                up_chunked = true;
+            } else if kt.eq_ignore_ascii_case("connection") {
+                let low = vt.to_ascii_lowercase();
+                if low.contains("close") {
+                    up_close = true;
+                } else if low.contains("keep-alive") {
+                    up_close = false;
+                }
+                continue;
+            }
+        }
         resp_hdr.push_str(&line);
     }
-    for (k, v) in &extra_headers {
-        resp_hdr.push_str(&format!("{}: {}\r\n", k, v));
-    }
-    resp_hdr.push_str("\r\n");
-    client.write_all(resp_hdr.as_bytes()).map_err(|e| e.to_string())?;
-    client.flush().map_err(|e| e.to_string())?;
 
-    // Zero-buffering chunk/SSE pass-through stream
+    let known_framing = up_content_length.is_some() || up_chunked;
+    let client_keep_alive_out = keep_alive_client && known_framing;
+    for (k, v) in &extra_headers {
+        resp_hdr.push_str(k);
+        resp_hdr.push_str(": ");
+        resp_hdr.push_str(v);
+        resp_hdr.push_str("\r\n");
+    }
+    resp_hdr.push_str(if client_keep_alive_out {
+        "Connection: keep-alive\r\n\r\n"
+    } else {
+        "Connection: close\r\n\r\n"
+    });
+    client
+        .write_all(resp_hdr.as_bytes())
+        .map_err(|e| e.to_string())?;
+
     let mut buf = [0u8; 8192];
-    loop {
-        match up_reader.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                if client.write_all(&buf[..n]).is_err() {
-                    break;
+    let mut usage_tail = Vec::new();
+    let mut clean_upstream_eof = false;
+    let mut client_ok = true;
+
+    if let Some(mut remaining) = up_content_length {
+        while remaining > 0 {
+            let to_read = remaining.min(buf.len());
+            match up_reader.read(&mut buf[..to_read]) {
+                Ok(0) => break,
+                Ok(n) => {
+                    remaining -= n;
+                    if is_llm_post && is_2xx {
+                        capture_usage_tail(&mut usage_tail, &buf[..n]);
+                    }
+                    if client.write_all(&buf[..n]).is_err() {
+                        client_ok = false;
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        let _ = client.flush();
+        if remaining == 0 {
+            clean_upstream_eof = true;
+        }
+    } else if up_chunked {
+        let mut done_chunks = false;
+        loop {
+            let mut sz_line = String::new();
+            match up_reader.read_line(&mut sz_line) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            if client.write_all(sz_line.as_bytes()).is_err() {
+                client_ok = false;
+                break;
+            }
+            let sz_hex = sz_line.trim().split(';').next().unwrap_or("0");
+            let chunk_sz = match usize::from_str_radix(sz_hex, 16) {
+                Ok(v) => v,
+                Err(_) => break,
+            };
+            if chunk_sz == 0 {
+                // Forward trailing headers up to terminating empty CRLF line
+                loop {
+                    let mut tr = String::new();
+                    match up_reader.read_line(&mut tr) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {
+                            let _ = client.write_all(tr.as_bytes());
+                            if tr == "\r\n" || tr == "\n" {
+                                done_chunks = true;
+                                break;
+                            }
+                        }
+                    }
                 }
                 let _ = client.flush();
+                break;
             }
-            Err(_) => break,
+            let mut rem = chunk_sz;
+            let mut broken = false;
+            while rem > 0 {
+                let to_read = rem.min(buf.len());
+                match up_reader.read(&mut buf[..to_read]) {
+                    Ok(0) | Err(_) => {
+                        broken = true;
+                        break;
+                    }
+                    Ok(n) => {
+                        rem -= n;
+                        if is_llm_post && is_2xx {
+                            capture_usage_tail(&mut usage_tail, &buf[..n]);
+                        }
+                        if client.write_all(&buf[..n]).is_err() {
+                            client_ok = false;
+                            broken = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if broken {
+                break;
+            }
+            let mut crlf = [0u8; 2];
+            if up_reader.read_exact(&mut crlf).is_err() {
+                break;
+            }
+            if client.write_all(&crlf).is_err() {
+                client_ok = false;
+                break;
+            }
+            let _ = client.flush();
+        }
+        if done_chunks {
+            clean_upstream_eof = true;
+        }
+    } else {
+        // Unknown framing: zero-buffering pass-through until upstream closes.
+        let _ = client.flush();
+        loop {
+            match up_reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if is_llm_post && is_2xx {
+                        capture_usage_tail(&mut usage_tail, &buf[..n]);
+                    }
+                    if client.write_all(&buf[..n]).is_err() {
+                        client_ok = false;
+                        break;
+                    }
+                    let _ = client.flush();
+                }
+                Err(_) => break,
+            }
+        }
+    }
+
+    // Return clean keep-alive upstream socket to pool for zero-handshake reuse!
+    if clean_upstream_eof && !up_close && up_reader.buffer().is_empty() {
+        let warm_stream = up_reader.into_inner();
+        state.return_pooled_upstream(backend_idx, warm_stream);
+    }
+
+    // Reconcile real upstream provider-confirmed cache read/write usage (after client flush!).
+    if is_llm_post && is_2xx && !usage_tail.is_empty() {
+        let (hit, wr) = extract_provider_usage_tokens(&usage_tail);
+        if hit > 0 {
+            state
+                .telemetry
+                .provider_confirmed_hit_tokens
+                .fetch_add(hit, Ordering::Relaxed);
+        }
+        if wr > 0 {
+            state
+                .telemetry
+                .provider_confirmed_write_tokens
+                .fetch_add(wr, Ordering::Relaxed);
         }
     }
 
@@ -1050,6 +1488,20 @@ fn handle_client(mut client: TcpStream, state: Arc<ProxyState>) -> Result<(), St
             rt.complete(selected_backend, est_prefill_tokens, 64, ttft_ms);
         }
     }
-    let _ = client.shutdown(Shutdown::Both);
-    Ok(())
+    Ok(client_ok && client_keep_alive_out && clean_upstream_eof)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_provider_usage_tokens_anthropic_and_openai() {
+        let anth = br#"event: message_start
+data: {"type":"message_start","message":{"usage":{"input_tokens":50,"cache_creation_input_tokens":1200,"cache_read_input_tokens":38400}}}"#;
+        assert_eq!(extract_provider_usage_tokens(anth), (38400, 1200));
+
+        let oai = br#"{"id":"chatcmpl-1","usage":{"prompt_tokens":32000,"prompt_tokens_details":{"cached_tokens":31500}}}"#;
+        assert_eq!(extract_provider_usage_tokens(oai), (31500, 0));
+    }
 }

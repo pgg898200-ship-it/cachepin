@@ -3,7 +3,7 @@
 use std::io::{self, Read};
 use std::path::PathBuf;
 
-use crate::audit::audit_jsonl_file;
+use crate::audit::{audit_jsonl_file, audit_multiple_paths, diff_two_requests};
 use crate::bench::run_full_benchmark_suite;
 use crate::canonical::CompilerConfig;
 use crate::mcp::run_mcp_stdio;
@@ -31,6 +31,7 @@ pub fn run_cli(args: &[String]) -> Result<(), String> {
         }
         "proxy" => cmd_proxy(&args[2..]),
         "audit" => cmd_audit(&args[2..]),
+        "diff" => cmd_diff(&args[2..]),
         "optimize" => cmd_optimize(&args[2..]),
         "bench" => cmd_bench(&args[2..]),
         "mcp" => cmd_mcp(&args[2..]),
@@ -51,7 +52,8 @@ USAGE:
 
 COMMANDS:
   proxy      Start the low-latency HTTP/SSE caching & swarm-coalescing reverse proxy
-  audit      Scan a JSONL request trace for cache misses, root causes & dollar waste
+  audit      Scan JSONL traces, Claude Code (~/.claude/projects), or Codex (~/.codex/sessions)
+  diff       SIMD byte-level prefix divergence & counterfactual recovery between two JSON payloads
   optimize   Canonicalize and inject exact-DP breakpoints into a single JSON request (stdin/file)
   bench      Run reproducible [LIVE-CPU] and [SIM-TRACE] benchmarks
   mcp        Start native stdio Model Context Protocol (MCP) server for coding agents
@@ -59,9 +61,11 @@ COMMANDS:
   version    Print version and active SIMD backend ({})
 
 EXAMPLES:
+  cachepin audit --auto
   cachepin audit --claude-code
-  cachepin audit ./swarm_trace.jsonl --json
-  cachepin proxy --upstream http://127.0.0.1:8000 --port 47820
+  cachepin audit --codex
+  cachepin diff agent_a.json agent_b.json
+  cachepin proxy --upstream https://api.anthropic.com --port 47820
   cachepin proxy --backends http://gpu1:8000,http://gpu2:8000 --kv-tokens 131072
   cat request.json | cachepin optimize --mode swarm
   cachepin bench --json
@@ -154,8 +158,15 @@ fn cmd_proxy(args: &[String]) -> Result<(), String> {
     run_proxy_blocking(cfg)
 }
 
+fn resolve_home_dir() -> Result<PathBuf, String> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(PathBuf::from)
+        .map_err(|_| "cannot resolve HOME directory".to_string())
+}
+
 fn cmd_audit(args: &[String]) -> Result<(), String> {
-    let mut path: Option<PathBuf> = None;
+    let mut paths: Vec<PathBuf> = Vec::new();
     let mut mode = CanonicalMode::SwarmAlign;
     let mut provider: Option<ProviderFormat> = None;
     let mut as_json = false;
@@ -173,23 +184,83 @@ fn cmd_audit(args: &[String]) -> Result<(), String> {
                 ));
             }
             "--claude-code" => {
-                let home = std::env::var("HOME")
-                    .or_else(|_| std::env::var("USERPROFILE"))
-                    .map_err(|_| "cannot resolve HOME directory for --claude-code")?;
-                path = Some(PathBuf::from(home).join(".claude").join("projects"));
+                let home = resolve_home_dir()?;
+                paths.push(home.join(".claude").join("projects"));
+            }
+            "--codex" => {
+                let home = resolve_home_dir()?;
+                paths.push(home.join(".codex").join("sessions"));
+            }
+            "--auto" => {
+                let home = resolve_home_dir()?;
+                paths.push(home.join(".claude").join("projects"));
+                paths.push(home.join(".codex").join("sessions"));
             }
             "--json" => as_json = true,
             "-h" | "--help" => {
-                println!("Usage: cachepin audit (<trace.jsonl|dir> | --claude-code) [--mode json|hoist|swarm] [--provider anthropic|openai|vllm] [--json]");
+                println!("Usage: cachepin audit (<trace.jsonl|dir> | --claude-code | --codex | --auto) [--mode json|hoist|swarm] [--provider anthropic|openai|vllm] [--json]");
                 return Ok(());
             }
-            p if !p.starts_with('-') => path = Some(PathBuf::from(p)),
+            p if !p.starts_with('-') => paths.push(PathBuf::from(p)),
             other => return Err(format!("unknown audit flag '{}'", other)),
         }
         i += 1;
     }
-    let trace_path = path.ok_or("missing <trace.jsonl|dir> path or --claude-code. Run `cachepin audit --help`.")?;
-    let report = audit_jsonl_file(&trace_path, mode, provider)?;
+    if paths.is_empty() {
+        return Err(
+            "missing <trace.jsonl|dir> path or --claude-code / --codex / --auto. Run `cachepin audit --help`."
+                .to_string(),
+        );
+    }
+    let report = if paths.len() == 1 {
+        audit_jsonl_file(&paths[0], mode, provider)?
+    } else {
+        audit_multiple_paths(&paths, mode, provider)?
+    };
+    if as_json {
+        println!("{}", report.to_json_string());
+    } else {
+        print!("{}", report.format_human());
+    }
+    Ok(())
+}
+
+fn cmd_diff(args: &[String]) -> Result<(), String> {
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut mode = CanonicalMode::SwarmAlign;
+    let mut provider: Option<ProviderFormat> = None;
+    let mut as_json = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--mode" | "-m" => {
+                i += 1;
+                mode = CanonicalMode::from_str_loose(args.get(i).ok_or("--mode requires value")?);
+            }
+            "--provider" => {
+                i += 1;
+                provider = Some(ProviderFormat::from_str_loose(
+                    args.get(i).ok_or("--provider requires value")?,
+                ));
+            }
+            "--json" => as_json = true,
+            "-h" | "--help" => {
+                println!("Usage: cachepin diff <req_a.json> <req_b.json> [--mode json|hoist|swarm] [--provider anthropic|openai|vllm] [--json]");
+                return Ok(());
+            }
+            p if !p.starts_with('-') => files.push(PathBuf::from(p)),
+            other => return Err(format!("unknown diff flag '{}'", other)),
+        }
+        i += 1;
+    }
+    if files.len() != 2 {
+        return Err("expected exactly 2 JSON files: `cachepin diff <req_a.json> <req_b.json>`".to_string());
+    }
+    let a = std::fs::read(&files[0])
+        .map_err(|e| format!("failed to read {}: {}", files[0].display(), e))?;
+    let b = std::fs::read(&files[1])
+        .map_err(|e| format!("failed to read {}: {}", files[1].display(), e))?;
+    let report = diff_two_requests(&a, &b, mode, provider)?;
     if as_json {
         println!("{}", report.to_json_string());
     } else {

@@ -10,10 +10,10 @@
     {
       "name": "cachepin",
       "source": "./",
-      "description": "Diagnose ~/.claude/projects cache waste, canonicalize multi-agent prefixes losslessly, solve exact 1h/5m breakpoints, coalesce cold swarm herds, and route vLLM/SGLang clusters.",
-      "version": "0.1.0",
+      "description": "Diagnose ~/.claude/projects & ~/.codex/sessions cache waste, canonicalize multi-agent prefixes losslessly (AVX2/NEON), solve exact 1h/5m breakpoints, coalesce cold swarm herds, and route vLLM/SGLang clusters.",
+      "version": "0.2.0",
       "category": "performance",
-      "tags": ["prompt-cache", "kv-cache", "multi-agent", "mcp", "vllm"]
+      "tags": ["prompt-cache", "kv-cache", "multi-agent", "mcp", "vllm", "claude-code", "codex"]
     }
   ]
 }

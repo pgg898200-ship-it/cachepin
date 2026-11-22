@@ -135,6 +135,39 @@ impl JsonValue {
         }
     }
 
+    /// Sets `key` to `val` if `self` is a `JsonValue::Object`, preserving
+    /// lexicographical key order when inserting a new field.
+    /// Updates the first existing entry in place (stripping any duplicates),
+    /// otherwise inserts `(key.to_string(), val)` at `partition_point(|(k, _)| k.as_str() < key)`.
+    pub fn set_field_sorted(&mut self, key: &str, val: JsonValue) {
+        if let JsonValue::Object(entries) = self {
+            let mut updated = false;
+            let mut i = 0usize;
+            let mut val_opt = Some(val);
+            while i < entries.len() {
+                if entries[i].0 == key {
+                    if !updated {
+                        if let Some(v) = val_opt.take() {
+                            entries[i].1 = v;
+                        }
+                        updated = true;
+                        i += 1;
+                    } else {
+                        entries.remove(i);
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+            if !updated {
+                if let Some(v) = val_opt.take() {
+                    let pos = entries.partition_point(|(k, _)| k.as_str() < key);
+                    entries.insert(pos, (key.to_string(), v));
+                }
+            }
+        }
+    }
+
     /// Removes `key` from `self` if it is a `JsonValue::Object`, returning the
     /// first removed value (and stripping any duplicate entries with the same key).
     pub fn remove_field(&mut self, key: &str) -> Option<JsonValue> {
@@ -162,9 +195,26 @@ impl JsonValue {
     pub fn canonicalize_in_place(&mut self) -> bool {
         match self {
             JsonValue::Object(entries) => {
-                let mut reordered = entries.windows(2).any(|w| w[0].0 > w[1].0);
-                if reordered {
+                let mut reordered = false;
+                let n = entries.len();
+                if n == 2 {
+                    if entries[0].0 > entries[1].0 {
+                        entries.swap(0, 1);
+                        reordered = true;
+                    }
+                } else if n <= 8 {
+                    // Strictly stable inline insertion sort for typical small JSON objects.
+                    for i in 1..n {
+                        let mut j = i;
+                        while j > 0 && entries[j - 1].0 > entries[j].0 {
+                            entries.swap(j - 1, j);
+                            reordered = true;
+                            j -= 1;
+                        }
+                    }
+                } else if entries.windows(2).any(|w| w[0].0 > w[1].0) {
                     entries.sort_by(|a, b| a.0.cmp(&b.0));
+                    reordered = true;
                 }
                 for (_, v) in entries.iter_mut() {
                     if v.canonicalize_in_place() {
@@ -208,11 +258,14 @@ impl<'a> Parser<'a> {
         self.bytes.get(self.pos).copied()
     }
 
-    #[inline]
+    #[inline(always)]
     fn skip_ws(&mut self) {
         let bytes = self.bytes;
         let len = bytes.len();
         let mut pos = self.pos;
+        if pos < len && bytes[pos] > b' ' {
+            return;
+        }
         while pos < len {
             let b = bytes[pos];
             if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
@@ -230,7 +283,10 @@ impl<'a> Parser<'a> {
             .peek()
             .ok_or_else(|| format!("unexpected EOF at byte {}", self.pos))?;
         match b {
-            b'"' => self.parse_string().map(JsonValue::String),
+            b'"' => {
+                self.pos += 1;
+                self.parse_string_after_quote().map(JsonValue::String)
+            }
             b'{' => {
                 if depth >= MAX_DEPTH {
                     return Err(format!(
@@ -363,56 +419,90 @@ impl<'a> Parser<'a> {
         Ok(val)
     }
 
+    /// Parses a JSON string assuming the opening `"` has already been consumed.
     #[inline]
-    fn parse_string(&mut self) -> Result<String, String> {
-        if self.peek() != Some(b'"') {
-            return Err(format!("expected '\"' at byte {}", self.pos));
-        }
-        self.pos += 1;
-
+    fn parse_string_after_quote(&mut self) -> Result<String, String> {
         let bytes = self.bytes;
         let len = bytes.len();
         let start = self.pos;
 
-        // AVX2-accelerated fast path: scan unescaped string 32 bytes/iter with zero intermediate allocations.
-        let pos = start + crate::simd::find_json_special_byte(&bytes[start..]);
-        if pos >= len {
-            return Err(format!("unterminated JSON string starting near byte {start}"));
+        // Fast inline scan for short strings (keys, roles, enum tags <= 16 bytes):
+        // avoids cross-ABI AVX2 function call + vzeroupper overhead on tiny tokens.
+        let quick_end = (start + 16).min(len);
+        let mut pos = start;
+        while pos < quick_end {
+            let b = bytes[pos];
+            if b == b'"' {
+                self.pos = pos + 1;
+                // SAFETY: `self.src` is valid UTF-8, and `start` (right after `"`)
+                // and `pos` (at `"`) are both ASCII char boundaries.
+                let slice = unsafe { std::str::from_utf8_unchecked(&bytes[start..pos]) };
+                return Ok(slice.to_owned());
+            }
+            if b < 0x20 || b == b'\\' {
+                break;
+            }
+            pos += 1;
         }
-        let first_special = bytes[pos];
-        if first_special == b'"' {
-            self.pos = pos + 1;
-            return Ok(self.src[start..pos].to_string());
-        }
-        if first_special < 0x20 {
+
+        if pos == quick_end {
+            // Long string fast path: SIMD scans 32 bytes/iter (AVX2) or 16 bytes/iter (NEON).
+            pos += crate::simd::find_json_special_byte(&bytes[pos..]);
+            if pos >= len {
+                return Err(format!("unterminated JSON string starting near byte {start}"));
+            }
+            let first_special = bytes[pos];
+            if first_special == b'"' {
+                self.pos = pos + 1;
+                // SAFETY: `self.src` is valid UTF-8 and both endpoints are ASCII `"`.
+                let slice = unsafe { std::str::from_utf8_unchecked(&bytes[start..pos]) };
+                return Ok(slice.to_owned());
+            }
+            if first_special < 0x20 {
+                return Err(format!(
+                    "unescaped control character 0x{first_special:02x} in string at byte {pos}"
+                ));
+            }
+        } else if bytes[pos] < 0x20 {
             return Err(format!(
-                "unescaped control character 0x{first_special:02x} in string at byte {pos}"
+                "unescaped control character 0x{:02x} in string at byte {pos}",
+                bytes[pos]
             ));
         }
 
-        let mut out = String::with_capacity((pos - start) + 32);
-        out.push_str(&self.src[start..pos]);
-        self.pos = pos;
-        let mut chunk_start = pos;
+        self.parse_string_escaped(start, pos)
+    }
 
-        while self.pos < len {
-            let rel = crate::simd::find_json_special_byte(&bytes[self.pos..]);
-            self.pos += rel;
-            if self.pos >= len {
-                break;
-            }
+    #[cold]
+    #[inline(never)]
+    fn parse_string_escaped(&mut self, start: usize, first_esc: usize) -> Result<String, String> {
+        let bytes = self.bytes;
+        let len = bytes.len();
+        let mut out = String::with_capacity((first_esc - start) + 64);
+        // SAFETY: `self.src` is valid UTF-8, `start` follows ASCII `"`, `first_esc` is at ASCII `\`.
+        out.push_str(unsafe { std::str::from_utf8_unchecked(&bytes[start..first_esc]) });
+        self.pos = first_esc;
+        let mut chunk_start = first_esc;
+
+        loop {
             let b = bytes[self.pos];
             match b {
                 b'"' => {
                     if chunk_start < self.pos {
-                        out.push_str(&self.src[chunk_start..self.pos]);
+                        // SAFETY: `chunk_start` follows ASCII escape and `self.pos` is at ASCII `"`.
+                        out.push_str(unsafe {
+                            std::str::from_utf8_unchecked(&bytes[chunk_start..self.pos])
+                        });
                     }
                     self.pos += 1;
                     return Ok(out);
                 }
                 b'\\' => {
                     if chunk_start < self.pos {
-                        out.push_str(&self.src[chunk_start..self.pos]);
+                        // SAFETY: `chunk_start` follows ASCII escape and `self.pos` is at ASCII `\`.
+                        out.push_str(unsafe {
+                            std::str::from_utf8_unchecked(&bytes[chunk_start..self.pos])
+                        });
                     }
                     self.pos += 1;
 
@@ -480,6 +570,15 @@ impl<'a> Parser<'a> {
                     ));
                 }
             }
+
+            if self.pos >= len {
+                break;
+            }
+            let rel = crate::simd::find_json_special_byte(&bytes[self.pos..]);
+            self.pos += rel;
+            if self.pos >= len {
+                break;
+            }
         }
 
         Err(format!("unterminated JSON string starting near byte {start}"))
@@ -534,7 +633,8 @@ impl<'a> Parser<'a> {
                     self.pos
                 ));
             }
-            let key = self.parse_string()?;
+            self.pos += 1;
+            let key = self.parse_string_after_quote()?;
             self.skip_ws();
             if self.peek() != Some(b':') {
                 return Err(format!(
@@ -582,22 +682,94 @@ pub fn parse_json(input: &[u8]) -> Result<JsonValue, String> {
     Ok(val)
 }
 
+/// Lightweight recursive estimator returning a tight lower bound (exact for
+/// values without string escapes) on the compact RFC 8259 serialized byte length.
+pub fn estimate_serialized_len(val: &JsonValue) -> usize {
+    match val {
+        JsonValue::Null => 4,
+        JsonValue::Bool(true) => 4,
+        JsonValue::Bool(false) => 5,
+        JsonValue::Number(n) => n.len(),
+        JsonValue::String(s) => s.len() + 2,
+        JsonValue::Array(items) => {
+            if items.is_empty() {
+                2
+            } else {
+                let mut total = 2 + items.len() - 1;
+                for item in items {
+                    total += estimate_serialized_len(item);
+                }
+                total
+            }
+        }
+        JsonValue::Object(entries) => {
+            if entries.is_empty() {
+                2
+            } else {
+                let mut total = 2 + entries.len() - 1;
+                for (k, v) in entries {
+                    total += k.len() + 3 + estimate_serialized_len(v);
+                }
+                total
+            }
+        }
+    }
+}
+
 #[inline]
 fn write_escaped_string(s: &str, out: &mut Vec<u8>) {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
     let bytes = s.as_bytes();
-    out.reserve(bytes.len() + 2);
-    out.push(b'"');
     let len = bytes.len();
-    let mut i = 0usize;
-
-    while i < len {
-        let rel = crate::simd::find_json_special_byte(&bytes[i..]);
-        let hit = i + rel;
-        if hit == len {
-            out.extend_from_slice(&bytes[i..]);
-            break;
+    let first = crate::simd::find_json_special_byte(bytes);
+    if first == len {
+        out.reserve(len + 2);
+        let old_len = out.len();
+        // SAFETY: `out.reserve(len + 2)` guarantees at least `len + 2` writable spare bytes.
+        unsafe {
+            let dst = out.as_mut_ptr().add(old_len);
+            *dst = b'"';
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), dst.add(1), len);
+            *dst.add(len + 1) = b'"';
+            out.set_len(old_len + len + 2);
         }
+        return;
+    }
+    write_escaped_string_slow(bytes, first, out);
+}
+
+#[inline]
+pub(crate) fn write_escaped_key_colon(s: &str, out: &mut Vec<u8>) {
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let first = crate::simd::find_json_special_byte(bytes);
+    if first == len {
+        out.reserve(len + 3);
+        let old_len = out.len();
+        // SAFETY: `out.reserve(len + 3)` guarantees at least `len + 3` writable spare bytes.
+        unsafe {
+            let dst = out.as_mut_ptr().add(old_len);
+            *dst = b'"';
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), dst.add(1), len);
+            *dst.add(len + 1) = b'"';
+            *dst.add(len + 2) = b':';
+            out.set_len(old_len + len + 3);
+        }
+        return;
+    }
+    write_escaped_string_slow(bytes, first, out);
+    out.push(b':');
+}
+
+#[cold]
+fn write_escaped_string_slow(bytes: &[u8], first: usize, out: &mut Vec<u8>) {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let len = bytes.len();
+    out.reserve(len + 8);
+    out.push(b'"');
+
+    let mut i = 0usize;
+    let mut hit = first;
+    loop {
         if hit > i {
             out.extend_from_slice(&bytes[i..hit]);
         }
@@ -620,6 +792,15 @@ fn write_escaped_string(s: &str, out: &mut Vec<u8>) {
             ]),
         }
         i = hit + 1;
+        if i >= len {
+            break;
+        }
+        let rel = crate::simd::find_json_special_byte(&bytes[i..]);
+        hit = i + rel;
+        if hit == len {
+            out.extend_from_slice(&bytes[i..]);
+            break;
+        }
     }
 
     out.push(b'"');
@@ -649,8 +830,7 @@ pub fn serialize_json(val: &JsonValue, out: &mut Vec<u8>) {
                 if i > 0 {
                     out.push(b',');
                 }
-                write_escaped_string(k, out);
-                out.push(b':');
+                write_escaped_key_colon(k, out);
                 serialize_json(v, out);
             }
             out.push(b'}');
@@ -777,8 +957,7 @@ pub fn serialize_json_skip_top_key(val: &JsonValue, skip_top_key: &str, out: &mu
                 if emitted {
                     out.push(b',');
                 }
-                write_escaped_string(k, out);
-                out.push(b':');
+                write_escaped_key_colon(k, out);
                 serialize_json(v, out);
                 emitted = true;
             }
@@ -790,7 +969,7 @@ pub fn serialize_json_skip_top_key(val: &JsonValue, skip_top_key: &str, out: &mu
 
 /// Serializes `val` into an owned compact JSON `String`.
 pub fn json_to_string(val: &JsonValue) -> String {
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(estimate_serialized_len(val));
     serialize_json(val, &mut out);
     // All bytes emitted by `serialize_json` are guaranteed valid UTF-8.
     String::from_utf8(out).unwrap_or_default()
@@ -966,5 +1145,41 @@ mod tests {
         assert_eq!(removed, Some(JsonValue::Bool(false)));
         assert!(obj.get("added").is_none());
         assert!(obj.as_object_mut().is_some());
+    }
+
+    #[test]
+    fn test_set_field_sorted_and_estimate_serialized_len() {
+        let mut obj = parse_json(br#"{"b":2,"d":4,"m":13}"#).unwrap();
+        // Insert at beginning, middle, and end preserving sorted order.
+        obj.set_field_sorted("a", JsonValue::Number("1".to_string()));
+        obj.set_field_sorted("c", JsonValue::Number("3".to_string()));
+        obj.set_field_sorted("z", JsonValue::Null);
+        assert_eq!(
+            json_to_string(&obj),
+            r#"{"a":1,"b":2,"c":3,"d":4,"m":13,"z":null}"#
+        );
+        // Update existing key in place and strip duplicates.
+        if let Some(entries) = obj.as_object_mut() {
+            entries.insert(2, ("b".to_string(), JsonValue::Number("99".to_string())));
+        }
+        obj.set_field_sorted("b", JsonValue::Number("22".to_string()));
+        assert_eq!(
+            json_to_string(&obj),
+            r#"{"a":1,"b":22,"c":3,"d":4,"m":13,"z":null}"#
+        );
+        assert!(!obj.canonicalize_in_place());
+
+        // Exact estimate on escape-free JSON.
+        let clean = parse_json(
+            br#"{"a":true,"b":false,"c":null,"d":[1,2.5,"hello",{},[]],"e":{"k":"val"}}"#,
+        )
+        .unwrap();
+        let ser = json_to_string(&clean);
+        assert_eq!(estimate_serialized_len(&clean), ser.len());
+
+        // Tight lower bound on escaped JSON.
+        let escaped = parse_json(br#"{"text":"line1\nline2\"quoted\""}"#).unwrap();
+        let ser_esc = json_to_string(&escaped);
+        assert!(estimate_serialized_len(&escaped) <= ser_esc.len());
     }
 }

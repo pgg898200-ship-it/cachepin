@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "docs/assets/**"
       - "benchmarks/results.json"
       - "llms.txt"
       - "SKILL.md"
@@ -29,10 +30,13 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: Assemble Pages bundle with live AEO assets
+      - name: Assemble Pages bundle with live AEO & visual assets
         run: |
-          mkdir -p _site
+          mkdir -p _site/assets
           cp -r site/* _site/
+          if [ -d docs/assets ]; then
+            cp -r docs/assets/* _site/assets/
+          fi
           cp llms.txt SKILL.md server.json _site/
           cp benchmarks/results.json _site/results.json
       - uses: actions/upload-pages-artifact@v3

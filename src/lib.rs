@@ -23,8 +23,9 @@ pub mod types;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-use crate::canonical::{apply_breakpoints_to_json, CompilerConfig, PrefixCompiler};
+use crate::canonical::{apply_breakpoints_to_value, CompilerConfig, PrefixCompiler};
 use crate::dp_planner::solve_optimal_breakpoints;
+use crate::json::{estimate_serialized_len, serialize_json};
 use crate::pricing::lookup_pricing;
 use crate::radix::PrefixRadixTree;
 use crate::simd::derive_tenant_key;
@@ -68,9 +69,13 @@ impl CachePinEngine {
         now_ms: u64,
         inject_breakpoints: bool,
     ) -> Result<EngineOutput, String> {
-        let compiled = self
-            .compiler
-            .compile_request(tenant_id, raw_json, provider_hint)?;
+        let emit_canonical = self.mode == CanonicalMode::ObserveOnly || !inject_breakpoints;
+        let (compiled, mut ast) = self.compiler.compile_request_with_ast(
+            tenant_id,
+            raw_json,
+            provider_hint,
+            emit_canonical,
+        )?;
         let pricing = lookup_pricing(&compiled.model, compiled.provider);
         let tk = derive_tenant_key(&self.tenant_secret, tenant_id);
         let tenant_u64 = u64::from_le_bytes([
@@ -104,15 +109,13 @@ impl CachePinEngine {
             raw_json.to_vec()
         } else if inject_breakpoints && !plan.breakpoints.is_empty() {
             let cache_key = format!("cp-{:016x}", compiled.shared_prefix_hash);
-            apply_breakpoints_to_json(
-                &compiled.canonical_json,
-                compiled.provider,
-                &plan,
-                Some(&cache_key),
-            )
-            .unwrap_or_else(|_| compiled.canonical_json.clone())
-        } else {
+            apply_breakpoints_to_value(&mut ast, compiled.provider, &plan, Some(&cache_key))
+        } else if !compiled.canonical_json.is_empty() {
             compiled.canonical_json.clone()
+        } else {
+            let mut out = Vec::with_capacity(estimate_serialized_len(&ast) + 32);
+            serialize_json(&ast, &mut out);
+            out
         };
 
         Ok(EngineOutput {

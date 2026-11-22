@@ -1827,6 +1827,240 @@ def test_10_audit_cli_counterfactual_consistency() -> str:
             trace_path.unlink(missing_ok=True)
 
 
+def test_11_diff_cli_and_codex_usage_audit() -> str:
+    """Verify `cachepin diff <a.json> <b.json>` and Codex CLI / OpenAI usage log auditing."""
+    bin_path = require_binary()
+    tmp_dir = Path(tempfile.mkdtemp(prefix="cachepin_diff_codex_"))
+    try:
+        doc = make_stable_repo_spec(24)
+        req_a = {
+            "model": "claude-opus-5-5",
+            "tools": [
+                {"name": "z_tool", "input_schema": {"type": "object", "properties": {"x": {"type": "string"}}}},
+                {"name": "a_tool", "input_schema": {"type": "object", "properties": {"y": {"type": "integer"}}}},
+            ],
+            "system": [{"type": "text", "text": f"Current time: 2026-11-22T12:00:01Z\n{doc}"}],
+            "messages": [{"role": "user", "content": "Agent A diff check"}],
+        }
+        req_b = {
+            "model": "claude-opus-5-5",
+            "tools": [
+                {"input_schema": {"properties": {"y": {"type": "integer"}}, "type": "object"}, "name": "a_tool"},
+                {"input_schema": {"properties": {"x": {"type": "string"}}, "type": "object"}, "name": "z_tool"},
+            ],
+            "system": [{"type": "text", "text": f"Current time: 2026-11-22T12:00:09Z\n{doc}"}],
+            "messages": [{"role": "user", "content": "Agent B diff check"}],
+        }
+        pa = tmp_dir / "a.json"
+        pb = tmp_dir / "b.json"
+        pa.write_text(json.dumps(req_a, separators=(",", ":")), encoding="utf-8")
+        pb.write_text(json.dumps(req_b, separators=(",", ":")), encoding="utf-8")
+
+        p_diff = subprocess.run(
+            [str(bin_path), "diff", str(pa), str(pb), "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        diff = json.loads(p_diff.stdout)
+        assert float(diff["raw_hit_pct"]) < 15.0, f"Expected low raw hit, got {diff}"
+        assert float(diff["opt_hit_pct"]) > 90.0, f"Expected >90% recovered hit, got {diff}"
+        assert diff["repairs"]["tools_reordered"] is True
+        assert int(diff["repairs"]["volatile_spans_hoisted"]) >= 2
+
+        codex_log = tmp_dir / "codex_session.jsonl"
+        codex_log.write_text(
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "type": "event_msg",
+                            "session_id": "cx-1",
+                            "timestamp": "2026-11-22T12:00:00Z",
+                            "payload": {
+                                "type": "token_count",
+                                "model": "gpt-5.6",
+                                "info": {"last_token_usage": {"input_tokens": 30000, "cached_input_tokens": 0}},
+                            },
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "event_msg",
+                            "session_id": "cx-1",
+                            "timestamp": "2026-11-22T12:00:20Z",
+                            "payload": {
+                                "type": "token_count",
+                                "model": "gpt-5.6",
+                                "info": {"last_token_usage": {"input_tokens": 30500, "cached_input_tokens": 29800}},
+                            },
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "event_msg",
+                            "session_id": "cx-1",
+                            "timestamp": "2026-11-22T12:00:45Z",
+                            "payload": {
+                                "type": "token_count",
+                                "model": "gpt-5.6",
+                                "info": {"last_token_usage": {"input_tokens": 31000, "cached_input_tokens": 0}},
+                            },
+                        }
+                    ),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        p_aud = subprocess.run(
+            [str(bin_path), "audit", str(codex_log), "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        aud = json.loads(p_aud.stdout)
+        assert aud["requests_analyzed"] == 3, f"Expected 3 Codex turns, got {aud}"
+        assert aud["miss_reasons"].get("prefix_mutation", {}).get("count") == 1
+        assert float(aud["saved_usd"]) > 0.05
+
+        return (
+            f"diff raw={diff['raw_hit_pct']:.1f}%->opt={diff['opt_hit_pct']:.1f}%, "
+            f"codex 3 turns audited (saved=${aud['saved_usd']:.4f})"
+        )
+    finally:
+        for child in tmp_dir.glob("*"):
+            child.unlink(missing_ok=True)
+        tmp_dir.rmdir()
+
+
+def test_12_live_keepalive_pool_and_provider_usage_reconciliation() -> str:
+    """Verify HTTP/1.1 upstream keep-alive pool reuse & live provider usage token reconciliation."""
+    bin_path = require_binary()
+    up_port = find_free_port()
+    proxy_port = find_free_port()
+    accepted_conns = [0]
+    handled_reqs = [0]
+    lock = threading.Lock()
+
+    class KeepAliveHandler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def setup(self) -> None:
+            super().setup()
+            with lock:
+                accepted_conns[0] += 1
+
+        def do_POST(self) -> None:
+            clen = int(self.headers.get("Content-Length", "0"))
+            _ = self.rfile.read(clen) if clen else b""
+            with lock:
+                handled_reqs[0] += 1
+            body = json.dumps(
+                {
+                    "id": "msg_ka",
+                    "usage": {
+                        "input_tokens": 64,
+                        "cache_creation_input_tokens": 1200,
+                        "cache_read_input_tokens": 38400,
+                    },
+                }
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, fmt: str, *args: object) -> None:
+            return
+
+    class ThreadedSrv(http.server.ThreadingHTTPServer):
+        daemon_threads = True
+
+    srv = ThreadedSrv(("127.0.0.1", up_port), KeepAliveHandler)
+    srv_thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    srv_thread.start()
+
+    proc: Optional[subprocess.Popen[bytes]] = None
+    try:
+        proc = subprocess.Popen(
+            [
+                str(bin_path),
+                "proxy",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(proxy_port),
+                "--upstream",
+                f"http://127.0.0.1:{up_port}",
+                "--mode",
+                "swarm",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            try:
+                c = http.client.HTTPConnection("127.0.0.1", proxy_port, timeout=1.0)
+                c.request("GET", "/health")
+                if c.getresponse().status == 200:
+                    c.close()
+                    break
+            except Exception:
+                time.sleep(0.05)
+
+        payload = json.dumps(
+            {
+                "model": "claude-opus-5-5",
+                "max_tokens": 128,
+                "system": [{"type": "text", "text": make_stable_repo_spec(16)}],
+                "messages": [{"role": "user", "content": "Keep-alive test turn."}],
+            }
+        ).encode("utf-8")
+
+        conn = http.client.HTTPConnection("127.0.0.1", proxy_port, timeout=5.0)
+        for _ in range(6):
+            conn.request(
+                "POST",
+                "/v1/messages",
+                body=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Api-Key": "tenant-ka",
+                    "Connection": "keep-alive",
+                },
+            )
+            resp = conn.getresponse()
+            raw_resp = resp.read()
+            assert resp.status == 200, f"Expected 200, got {resp.status}: {raw_resp!r}"
+
+        conn.request("GET", "/stats")
+        stats = json.loads(conn.getresponse().read().decode("utf-8"))
+        conn.request("GET", "/metrics")
+        metrics = conn.getresponse().read().decode("utf-8")
+        conn.close()
+
+        pc = stats["provider_confirmed"]
+        assert pc["hit_tokens"] == 6 * 38400, f"Expected 230400 confirmed hit tokens, got {pc}"
+        assert pc["write_tokens"] == 6 * 1200, f"Expected 7200 confirmed write tokens, got {pc}"
+        assert pc["upstream_pool_reuses"] >= 4, f"Expected >=4 upstream keep-alive reuses, got {pc}"
+        assert accepted_conns[0] <= 2, f"Expected <=2 upstream TCP accepts via pooling, got {accepted_conns[0]}"
+        assert "cachepin_provider_confirmed_hit_tokens_total 230400" in metrics
+        assert "cachepin_upstream_pool_reuses_total" in metrics
+
+        return (
+            f"6 reqs over {accepted_conns[0]} upstream TCP socket (reuses={pc['upstream_pool_reuses']}), "
+            f"provider-confirmed hit={pc['hit_tokens']} / write={pc['write_tokens']}"
+        )
+    finally:
+        terminate_process(proc)
+        srv.shutdown()
+        srv.server_close()
+
+
 # =============================================================================
 # Runner
 # =============================================================================
@@ -1843,6 +2077,8 @@ TESTS: List[Tuple[str, Callable[[], str]]] = [
     ("Live HTTP Proxy + Observability + Single-Flight Burst", test_08_live_http_proxy_and_single_flight_burst),
     ("AVX2/SIMD LCP Parity Stress Test via FFI", test_09_avx2_simd_lcp_parity_stress),
     ("Audit CLI Counterfactual Consistency", test_10_audit_cli_counterfactual_consistency),
+    ("Diff CLI & Codex/OpenAI Usage Log Forensics", test_11_diff_cli_and_codex_usage_audit),
+    ("Live HTTP/1.1 Keep-Alive Pool & Provider Usage Reconciliation", test_12_live_keepalive_pool_and_provider_usage_reconciliation),
 ]
 
 
@@ -1853,7 +2089,7 @@ def main() -> int:
     total = len(TESTS)
 
     print("=" * 78)
-    print("  cachepin Adversarial Red-Team & Integration Verification Suite (10 vectors)")
+    print(f"  cachepin Adversarial Red-Team & Integration Verification Suite ({total} vectors)")
     print("=" * 78)
 
     for idx, (label, fn) in enumerate(TESTS, start=1):

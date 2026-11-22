@@ -1,15 +1,18 @@
 //! Zero-dependency SIMD acceleration, fast token estimation, and SipHash
 //! tenant-isolated cryptographic hashing for `cachepin`.
 //!
-//! Uses runtime AVX2 dispatch on x86/x86_64 with portable 64-bit word-wise
-//! fallbacks on all other architectures.
+//! Uses runtime AVX2 dispatch on x86/x86_64, native NEON on little-endian
+//! ARM64 (`aarch64`), and portable 64-bit word-wise fallbacks on all other
+//! architectures.
 
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+use std::arch::aarch64::*;
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-/// Returns the active SIMD backend identifier (`"avx2"` or `"scalar-u64"`).
+/// Returns the active SIMD backend identifier (`"avx2"`, `"neon"`, or `"scalar-u64"`).
 #[inline]
 pub fn simd_backend_name() -> &'static str {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -18,13 +21,18 @@ pub fn simd_backend_name() -> &'static str {
             return "avx2";
         }
     }
+    #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+    {
+        return "neon";
+    }
+    #[cfg(not(all(target_arch = "aarch64", target_endian = "little")))]
     "scalar-u64"
 }
 
 /// Computes the byte length of the longest common prefix of `a` and `b`.
 ///
-/// Dispatches to a 32-byte/iteration AVX2 kernel when supported by the host CPU,
-/// falling back to an 8-byte `u64` word-wise kernel otherwise.
+/// Dispatches to a 32-byte/iteration AVX2 kernel on x86/x86_64, a 16-byte/iteration
+/// NEON kernel on little-endian ARM64, or an 8-byte `u64` word-wise kernel otherwise.
 #[inline]
 pub fn longest_common_prefix_len(a: &[u8], b: &[u8]) -> usize {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -34,6 +42,12 @@ pub fn longest_common_prefix_len(a: &[u8], b: &[u8]) -> usize {
             return unsafe { longest_common_prefix_avx2(a, b) };
         }
     }
+    #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+    {
+        // SAFETY: NEON is guaranteed by the AArch64 ABI.
+        return unsafe { longest_common_prefix_neon(a, b) };
+    }
+    #[cfg(not(all(target_arch = "aarch64", target_endian = "little")))]
     longest_common_prefix_scalar(a, b)
 }
 
@@ -56,6 +70,34 @@ unsafe fn longest_common_prefix_avx2(a: &[u8], b: &[u8]) -> usize {
             return i + (!mask).trailing_zeros() as usize;
         }
         i += 32;
+    }
+
+    i + longest_common_prefix_scalar(&a[i..len], &b[i..len])
+}
+
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+unsafe fn longest_common_prefix_neon(a: &[u8], b: &[u8]) -> usize {
+    let len = a.len().min(b.len());
+    let pa = a.as_ptr();
+    let pb = b.as_ptr();
+    let mut i = 0usize;
+
+    while i + 16 <= len {
+        // SAFETY: `i + 16 <= len <= a.len()` and `i + 16 <= len <= b.len()`.
+        let va = vld1q_u8(pa.add(i));
+        let vb = vld1q_u8(pb.add(i));
+        let eq = vceqq_u8(va, vb);
+        if vminvq_u8(eq) != 0xFF {
+            let neq = vmvnq_u8(eq);
+            let u64s = vreinterpretq_u64_u8(neq);
+            let lo = vgetq_lane_u64::<0>(u64s);
+            if lo != 0 {
+                return i + (lo.trailing_zeros() as usize / 8);
+            }
+            let hi = vgetq_lane_u64::<1>(u64s);
+            return i + 8 + (hi.trailing_zeros() as usize / 8);
+        }
+        i += 16;
     }
 
     i + longest_common_prefix_scalar(&a[i..len], &b[i..len])
@@ -103,22 +145,28 @@ fn longest_common_prefix_scalar(a: &[u8], b: &[u8]) -> usize {
 
 /// Counts occurrences of `needle` inside `buf`.
 ///
-/// Dispatches to AVX2 when supported, falling back to a carry-free SWAR `u64`
-/// byte counter otherwise.
+/// Dispatches to AVX2 on x86/x86_64, NEON on little-endian ARM64, or a
+/// carry-free SWAR `u64` byte counter otherwise.
 #[inline]
 pub fn count_byte_simd(buf: &[u8], needle: u8) -> usize {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
-        if std::is_x86_feature_detected!("avx2") {
-            // SAFETY: Runtime feature detection verified AVX2 is available.
+        if std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("popcnt") {
+            // SAFETY: Runtime feature detection verified AVX2 and POPCNT are available.
             return unsafe { count_byte_avx2(buf, needle) };
         }
     }
+    #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+    {
+        // SAFETY: NEON is guaranteed by the AArch64 ABI.
+        return unsafe { count_byte_neon(buf, needle) };
+    }
+    #[cfg(not(all(target_arch = "aarch64", target_endian = "little")))]
     count_byte_scalar(buf, needle)
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[target_feature(enable = "avx2")]
+#[target_feature(enable = "avx2,popcnt")]
 unsafe fn count_byte_avx2(buf: &[u8], needle: u8) -> usize {
     let len = buf.len();
     let ptr = buf.as_ptr();
@@ -133,6 +181,31 @@ unsafe fn count_byte_avx2(buf: &[u8], needle: u8) -> usize {
         let mask = _mm256_movemask_epi8(cmp) as u32;
         count += mask.count_ones() as usize;
         i += 32;
+    }
+
+    count + count_byte_scalar(&buf[i..], needle)
+}
+
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+unsafe fn count_byte_neon(buf: &[u8], needle: u8) -> usize {
+    let len = buf.len();
+    let ptr = buf.as_ptr();
+    let vneedle = vdupq_n_u8(needle);
+    let mut count = 0usize;
+    let mut i = 0usize;
+
+    while i + 16 <= len {
+        let mut acc = vdupq_n_u8(0);
+        let mut iters = 0usize;
+        while iters < 255 && i + 16 <= len {
+            let chunk = vld1q_u8(ptr.add(i));
+            let cmp = vceqq_u8(chunk, vneedle);
+            // Matching lanes hold 0xFF (-1i8), so subtracting adds +1 per lane without overflow.
+            acc = vsubq_u8(acc, cmp);
+            i += 16;
+            iters += 1;
+        }
+        count += vaddlvq_u8(acc) as usize;
     }
 
     count + count_byte_scalar(&buf[i..], needle)
@@ -178,7 +251,8 @@ fn count_byte_scalar(buf: &[u8], needle: u8) -> usize {
 /// Returns the byte offset of the first JSON string-special byte
 /// (`b < 0x20 || b == b'"' || b == b'\\'`), or `buf.len()` if none exists.
 ///
-/// Dispatches to a 32-byte/iteration AVX2 kernel when supported by the host CPU.
+/// Dispatches to a 32-byte/iteration AVX2 kernel on x86/x86_64 or a
+/// 16-byte/iteration NEON kernel on little-endian ARM64.
 #[inline]
 pub fn find_json_special_byte(buf: &[u8]) -> usize {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -186,6 +260,13 @@ pub fn find_json_special_byte(buf: &[u8]) -> usize {
         if buf.len() >= 32 && std::is_x86_feature_detected!("avx2") {
             // SAFETY: AVX2 support verified at runtime above.
             return unsafe { find_json_special_byte_avx2(buf) };
+        }
+    }
+    #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+    {
+        if buf.len() >= 16 {
+            // SAFETY: NEON is guaranteed by the AArch64 ABI.
+            return unsafe { find_json_special_byte_neon(buf) };
         }
     }
     find_json_special_byte_scalar(buf)
@@ -219,7 +300,38 @@ unsafe fn find_json_special_byte_avx2(buf: &[u8]) -> usize {
     i + find_json_special_byte_scalar(&buf[i..])
 }
 
-#[inline]
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+unsafe fn find_json_special_byte_neon(buf: &[u8]) -> usize {
+    let len = buf.len();
+    let ptr = buf.as_ptr();
+    let v_ctrl_max = vdupq_n_u8(0x1F);
+    let v_quote = vdupq_n_u8(b'"');
+    let v_bs = vdupq_n_u8(b'\\');
+    let mut i = 0usize;
+
+    while i + 16 <= len {
+        let chunk = vld1q_u8(ptr.add(i));
+        // Unsigned `<= 0x1F` (safe for UTF-8 bytes >= 0x80).
+        let is_ctrl = vcleq_u8(chunk, v_ctrl_max);
+        let is_q = vceqq_u8(chunk, v_quote);
+        let is_bs = vceqq_u8(chunk, v_bs);
+        let any = vorrq_u8(is_ctrl, vorrq_u8(is_q, is_bs));
+        if vmaxvq_u8(any) != 0 {
+            let u64s = vreinterpretq_u64_u8(any);
+            let lo = vgetq_lane_u64::<0>(u64s);
+            if lo != 0 {
+                return i + (lo.trailing_zeros() as usize / 8);
+            }
+            let hi = vgetq_lane_u64::<1>(u64s);
+            return i + 8 + (hi.trailing_zeros() as usize / 8);
+        }
+        i += 16;
+    }
+
+    i + find_json_special_byte_scalar(&buf[i..])
+}
+
+#[inline(always)]
 fn find_json_special_byte_scalar(buf: &[u8]) -> usize {
     let len = buf.len();
     let mut i = 0usize;
@@ -231,6 +343,286 @@ fn find_json_special_byte_scalar(buf: &[u8]) -> usize {
         i += 1;
     }
     len
+}
+
+/// Returns the byte offset of the first occurrence of `b1`, `b2`, or `b3` in `buf`,
+/// or `buf.len()` if none exists.
+///
+/// Dispatches to a 32-byte/iteration AVX2 kernel on x86/x86_64, a 16-byte/iteration
+/// NEON kernel on little-endian ARM64, or a tight scalar loop otherwise.
+#[inline]
+pub fn find_any3_byte(buf: &[u8], b1: u8, b2: u8, b3: u8) -> usize {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if buf.len() >= 32 && std::is_x86_feature_detected!("avx2") {
+            // SAFETY: AVX2 support verified at runtime above.
+            return unsafe { find_any3_byte_avx2(buf, b1, b2, b3) };
+        }
+    }
+    #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+    {
+        if buf.len() >= 16 {
+            // SAFETY: NEON is guaranteed by the AArch64 ABI.
+            return unsafe { find_any3_byte_neon(buf, b1, b2, b3) };
+        }
+    }
+    find_any3_byte_scalar(buf, b1, b2, b3)
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn find_any3_byte_avx2(buf: &[u8], b1: u8, b2: u8, b3: u8) -> usize {
+    let len = buf.len();
+    let ptr = buf.as_ptr();
+    let v1 = _mm256_set1_epi8(b1 as i8);
+    let v2 = _mm256_set1_epi8(b2 as i8);
+    let v3 = _mm256_set1_epi8(b3 as i8);
+    let mut i = 0usize;
+
+    while i + 32 <= len {
+        // SAFETY: `i + 32 <= len`; `_mm256_loadu_si256` permits unaligned loads.
+        let chunk = _mm256_loadu_si256(ptr.add(i) as *const __m256i);
+        let m1 = _mm256_cmpeq_epi8(chunk, v1);
+        let m2 = _mm256_cmpeq_epi8(chunk, v2);
+        let m3 = _mm256_cmpeq_epi8(chunk, v3);
+        let any = _mm256_or_si256(m1, _mm256_or_si256(m2, m3));
+        let mask = _mm256_movemask_epi8(any) as u32;
+        if mask != 0 {
+            return i + (mask.trailing_zeros() as usize);
+        }
+        i += 32;
+    }
+
+    i + find_any3_byte_scalar(&buf[i..], b1, b2, b3)
+}
+
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+unsafe fn find_any3_byte_neon(buf: &[u8], b1: u8, b2: u8, b3: u8) -> usize {
+    let len = buf.len();
+    let ptr = buf.as_ptr();
+    let v1 = vdupq_n_u8(b1);
+    let v2 = vdupq_n_u8(b2);
+    let v3 = vdupq_n_u8(b3);
+    let mut i = 0usize;
+
+    while i + 16 <= len {
+        let chunk = vld1q_u8(ptr.add(i));
+        let m1 = vceqq_u8(chunk, v1);
+        let m2 = vceqq_u8(chunk, v2);
+        let m3 = vceqq_u8(chunk, v3);
+        let any = vorrq_u8(m1, vorrq_u8(m2, m3));
+        if vmaxvq_u8(any) != 0 {
+            let u64s = vreinterpretq_u64_u8(any);
+            let lo = vgetq_lane_u64::<0>(u64s);
+            if lo != 0 {
+                return i + (lo.trailing_zeros() as usize / 8);
+            }
+            let hi = vgetq_lane_u64::<1>(u64s);
+            return i + 8 + (hi.trailing_zeros() as usize / 8);
+        }
+        i += 16;
+    }
+
+    i + find_any3_byte_scalar(&buf[i..], b1, b2, b3)
+}
+
+#[inline(always)]
+fn find_any3_byte_scalar(buf: &[u8], b1: u8, b2: u8, b3: u8) -> usize {
+    let len = buf.len();
+    let mut i = 0usize;
+    while i < len {
+        let b = buf[i];
+        if b == b1 || b == b2 || b == b3 {
+            return i;
+        }
+        i += 1;
+    }
+    len
+}
+
+/// Visitor invoked by [`scan_any3_byte`] for every match of `b1`, `b2`, or `b3`.
+///
+/// Using a trait method allows implementors to mark `on_hit` as `#[inline(always)]`
+/// so fast-reject checks inline directly inside the AVX2/NEON vector loop with
+/// zero per-hit SIMD transitions.
+pub(crate) trait Any3Visitor {
+    fn on_hit(&mut self, rel: usize) -> usize;
+}
+
+/// Single-pass SIMD scanner invoking `visitor.on_hit(byte_index)` for every
+/// occurrence of `b1`, `b2`, or `b3` in `buf`, loading each vector chunk once
+/// with a single SIMD transition per buffer.
+///
+/// `on_hit(hit)` returns the next byte index to continue scanning from
+/// (returning `hit + 1` to continue normally, `end` to jump past a matched span,
+/// or `usize::MAX` to terminate scanning early).
+#[inline]
+pub(crate) fn scan_any3_byte<V: Any3Visitor>(
+    buf: &[u8],
+    b1: u8,
+    b2: u8,
+    b3: u8,
+    visitor: &mut V,
+) {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if buf.len() >= 32 && std::is_x86_feature_detected!("avx2") {
+            // SAFETY: Runtime feature detection verified AVX2 is available.
+            unsafe { scan_any3_byte_avx2(buf, b1, b2, b3, visitor) };
+            return;
+        }
+    }
+    #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+    {
+        if buf.len() >= 16 {
+            // SAFETY: NEON is guaranteed by the AArch64 ABI.
+            unsafe { scan_any3_byte_neon(buf, b1, b2, b3, visitor) };
+            return;
+        }
+    }
+    scan_any3_byte_scalar_from(buf, 0, b1, b2, b3, visitor);
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn scan_any3_byte_avx2<V: Any3Visitor>(
+    buf: &[u8],
+    b1: u8,
+    b2: u8,
+    b3: u8,
+    visitor: &mut V,
+) {
+    let len = buf.len();
+    let ptr = buf.as_ptr();
+    let v1 = _mm256_set1_epi8(b1 as i8);
+    let v2 = _mm256_set1_epi8(b2 as i8);
+    let v3 = _mm256_set1_epi8(b3 as i8);
+    let mut i = 0usize;
+
+    'chunks: while i + 32 <= len {
+        // SAFETY: `i + 32 <= len`; `_mm256_loadu_si256` permits unaligned loads.
+        let chunk = _mm256_loadu_si256(ptr.add(i) as *const __m256i);
+        let m1 = _mm256_cmpeq_epi8(chunk, v1);
+        let m2 = _mm256_cmpeq_epi8(chunk, v2);
+        let m3 = _mm256_cmpeq_epi8(chunk, v3);
+        let any = _mm256_or_si256(m1, _mm256_or_si256(m2, m3));
+        let mut mask = _mm256_movemask_epi8(any) as u32;
+        while mask != 0 {
+            let bit = mask.trailing_zeros() as usize;
+            let hit = i + bit;
+            let next = visitor.on_hit(hit);
+            if next == usize::MAX {
+                return;
+            }
+            if next <= hit + 1 {
+                mask &= mask - 1;
+            } else if next < i + 32 {
+                let shift = next - i;
+                mask &= !((1u32 << shift) - 1);
+            } else {
+                i = next;
+                continue 'chunks;
+            }
+        }
+        i += 32;
+    }
+
+    if i < len {
+        scan_any3_byte_scalar_from(buf, i, b1, b2, b3, visitor);
+    }
+}
+
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+unsafe fn scan_any3_byte_neon<V: Any3Visitor>(
+    buf: &[u8],
+    b1: u8,
+    b2: u8,
+    b3: u8,
+    visitor: &mut V,
+) {
+    let len = buf.len();
+    let ptr = buf.as_ptr();
+    let v1 = vdupq_n_u8(b1);
+    let v2 = vdupq_n_u8(b2);
+    let v3 = vdupq_n_u8(b3);
+    let mut i = 0usize;
+
+    'chunks: while i + 16 <= len {
+        let chunk = vld1q_u8(ptr.add(i));
+        let m1 = vceqq_u8(chunk, v1);
+        let m2 = vceqq_u8(chunk, v2);
+        let m3 = vceqq_u8(chunk, v3);
+        let any = vorrq_u8(m1, vorrq_u8(m2, m3));
+        if vmaxvq_u8(any) != 0 {
+            let u64s = vreinterpretq_u64_u8(any);
+            let mut lo = vgetq_lane_u64::<0>(u64s);
+            let mut hi = vgetq_lane_u64::<1>(u64s);
+            while lo != 0 {
+                let lane = (lo.trailing_zeros() as usize) / 8;
+                let hit = i + lane;
+                let next = visitor.on_hit(hit);
+                if next == usize::MAX {
+                    return;
+                }
+                if next >= i + 16 {
+                    i = next;
+                    continue 'chunks;
+                }
+                let advance = next.max(hit + 1);
+                if advance >= i + 8 {
+                    hi &= !0u64 << ((advance - (i + 8)) * 8);
+                    break;
+                }
+                lo &= !0u64 << ((advance - i) * 8);
+            }
+            while hi != 0 {
+                let lane = (hi.trailing_zeros() as usize) / 8;
+                let hit = i + 8 + lane;
+                let next = visitor.on_hit(hit);
+                if next == usize::MAX {
+                    return;
+                }
+                if next >= i + 16 {
+                    i = next;
+                    continue 'chunks;
+                }
+                let advance = next.max(hit + 1);
+                if advance >= i + 16 {
+                    break;
+                }
+                hi &= !0u64 << ((advance - (i + 8)) * 8);
+            }
+        }
+        i += 16;
+    }
+
+    if i < len {
+        scan_any3_byte_scalar_from(buf, i, b1, b2, b3, visitor);
+    }
+}
+
+#[inline(always)]
+fn scan_any3_byte_scalar_from<V: Any3Visitor>(
+    buf: &[u8],
+    mut i: usize,
+    b1: u8,
+    b2: u8,
+    b3: u8,
+    visitor: &mut V,
+) {
+    let len = buf.len();
+    while i < len {
+        let b = buf[i];
+        if b == b1 || b == b2 || b == b3 {
+            let next = visitor.on_hit(i);
+            if next == usize::MAX {
+                return;
+            }
+            i = next.max(i + 1);
+        } else {
+            i += 1;
+        }
+    }
 }
 
 const CLS_NONE: u8 = 0;
@@ -300,15 +692,8 @@ fn flush_run(class: u8, run_len: usize) -> u64 {
     }
 }
 
-/// Fast single-pass token estimator calibrated within ~10% of modern BPE
-/// tokenizers across JSON, source code, English prose, and UTF-8 multibyte text.
-///
-/// Always returns `0` on empty input and at least `1` on any non-empty input.
-pub fn estimate_tokens_fast(buf: &[u8]) -> u32 {
-    if buf.is_empty() {
-        return 0;
-    }
-
+#[inline]
+fn estimate_tokens_units_scalar(buf: &[u8]) -> u64 {
     let mut units: u64 = 0;
     let mut class = CLS_NONE;
     let mut run_len: usize = 0;
@@ -338,10 +723,234 @@ pub fn estimate_tokens_fast(buf: &[u8]) -> u32 {
         }
     }
 
-    units += flush_run(class, run_len);
+    units + flush_run(class, run_len)
+}
+
+#[inline]
+fn estimate_tokens_scalar(buf: &[u8]) -> u32 {
+    if buf.is_empty() {
+        return 0;
+    }
+    let units = estimate_tokens_units_scalar(buf);
     let est = (units + 4) / 8;
     let clamped = est.max(1);
     u32::try_from(clamped).unwrap_or(u32::MAX)
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2,popcnt")]
+unsafe fn estimate_tokens_avx2(buf: &[u8]) -> u32 {
+    let len = buf.len();
+    let ptr = buf.as_ptr();
+
+    // Signed-range bias constants for pure ASCII (0x00..=0x7F):
+    // - Alpha: `lower = b | 0x20`; `lower.wrapping_add(0x1F) as i8 < -102` iff `b'a'..=b'z'`
+    // - Digit: `b.wrapping_add(0x50) as i8 < -118` iff `b'0'..=b'9'`
+    // - Space: `b == 0x20 (' ') || b == 0x09 ('\t') || b == 0x0D ('\r')`
+    // - Newline: `b == 0x0A ('\n')`
+    let v_0x20 = _mm256_set1_epi8(0x20);
+    let v_alpha_bias = _mm256_set1_epi8(0x1F);
+    let v_alpha_lim = _mm256_set1_epi8(-102);
+    let v_digit_bias = _mm256_set1_epi8(0x50);
+    let v_digit_lim = _mm256_set1_epi8(-118);
+    let v_tab = _mm256_set1_epi8(b'\t' as i8);
+    let v_cr = _mm256_set1_epi8(b'\r' as i8);
+    let v_nl = _mm256_set1_epi8(b'\n' as i8);
+
+    // Accumulate in 1/16-token fixed-point units (`2 * scalar_units`) so every
+    // weight (including alpha excess `3/2` -> `3`) folds into a single register.
+    let mut units2: u64 = 0;
+
+    // Cross-chunk carry state across 64-byte iterations (minimal register footprint).
+    let mut prev_alpha6: u64 = 0;
+    let mut prev_space4: u64 = 0;
+    let mut prev_punct: u64 = 0;
+    let mut prev_digit3: u64 = 0;
+    let mut prev_d4: u64 = 0;
+    let mut pending_single_alpha: u64 = 0;
+
+    macro_rules! classify_32 {
+        ($c:expr) => {{
+            let lower = _mm256_or_si256($c, v_0x20);
+            let is_alpha = _mm256_cmpgt_epi8(v_alpha_lim, _mm256_add_epi8(lower, v_alpha_bias));
+            let is_digit = _mm256_cmpgt_epi8(v_digit_lim, _mm256_add_epi8($c, v_digit_bias));
+            let is_space = _mm256_or_si256(
+                _mm256_cmpeq_epi8($c, v_0x20),
+                _mm256_or_si256(_mm256_cmpeq_epi8($c, v_tab), _mm256_cmpeq_epi8($c, v_cr)),
+            );
+            let is_nl = _mm256_cmpeq_epi8($c, v_nl);
+            (
+                _mm256_movemask_epi8(is_alpha) as u32 as u64,
+                _mm256_movemask_epi8(is_digit) as u32 as u64,
+                _mm256_movemask_epi8(is_space) as u32 as u64,
+                _mm256_movemask_epi8(is_nl) as u32 as u64,
+            )
+        }};
+    }
+
+    macro_rules! accum_64 {
+        ($c0:expr, $c1:expr, $valid:expr $(, $update:ident)?) => {{
+            let (a0, d0, s0, n0) = classify_32!($c0);
+            let (a1, d1, s1, n1) = classify_32!($c1);
+
+            let valid: u64 = $valid;
+            let m_alpha = (a0 | (a1 << 32)) & valid;
+            let m_digit = (d0 | (d1 << 32)) & valid;
+            let m_space = (s0 | (s1 << 32)) & valid;
+            let m_nl = (n0 | (n1 << 32)) & valid;
+            let m_punct = !(m_alpha | m_digit | m_space | m_nl) & valid;
+
+            // Newlines: exact 12 units (6 * 2) per '\n'; skipped completely on compact JSON.
+            if m_nl != 0 {
+                units2 += (m_nl.count_ones() as u64) * 12;
+            }
+
+            // Punctuation: exact `8 * runs + 4 * bytes` in 1/16-token units.
+            let punct_starts = (m_punct & !((m_punct << 1) | prev_punct)).count_ones() as u64;
+            units2 += punct_starts * 8 + (m_punct.count_ones() as u64) * 4;
+
+            // Alpha runs (100% branchless, exact across 64-byte boundaries):
+            // len == 1 -> 12, len 2..=6 -> 16, len > 6 -> 16 + (len - 6) * 3.
+            let prev_alpha1 = prev_alpha6 >> 5;
+            let alpha_starts = m_alpha & !((m_alpha << 1) | prev_alpha1);
+            let a_starts_cnt = alpha_starts.count_ones() as u64;
+            let single_cnt = (pending_single_alpha & !m_alpha & 1)
+                + ((alpha_starts & !(m_alpha >> 1)) & (u64::MAX >> 1)).count_ones() as u64;
+
+            let pa2 = prev_alpha6 & (prev_alpha6 << 1);
+            let pa4 = pa2 & (pa2 << 2);
+            let a2 = m_alpha & ((m_alpha << 1) | prev_alpha1);
+            let a4 = a2 & ((a2 << 2) | ((pa2 >> 4) & 3));
+            let a7 = a4 & ((a4 << 3) | ((pa4 >> 3) & 7));
+
+            units2 = units2 + a_starts_cnt * 16 + (a7.count_ones() as u64) * 3 - single_cnt * 4;
+
+            // Digit runs: exact 16 for len 1..=3; rare >=4-digit runs add 8/start + 5/excess byte.
+            let prev_digit1 = prev_digit3 >> 2;
+            let d_starts = (m_digit & !((m_digit << 1) | prev_digit1)).count_ones() as u64;
+            units2 += d_starts * 16;
+            let pd2 = prev_digit3 & (prev_digit3 << 1);
+            let d2 = m_digit & ((m_digit << 1) | prev_digit1);
+            let d4 = d2 & ((d2 << 2) | ((pd2 >> 1) & 3));
+            if d4 != 0 {
+                let d4_starts = (d4 & !((d4 << 1) | prev_d4)).count_ones() as u64;
+                units2 += d4_starts * 8 + (d4.count_ones() as u64) * 5;
+            }
+
+            // Space runs: exact 0 for len <= 4, +4 units (1/16) per excess space beyond 4.
+            let ps2 = prev_space4 & (prev_space4 << 1);
+            let s2 = m_space & ((m_space << 1) | (prev_space4 >> 3));
+            let s4 = s2 & ((s2 << 2) | ((ps2 >> 2) & 3));
+            let s5 = s4 & ((m_space << 4) | prev_space4);
+            if s5 != 0 {
+                units2 += (s5.count_ones() as u64) * 4;
+            }
+
+            $(
+                let _ = stringify!($update);
+                pending_single_alpha = alpha_starts >> 63;
+                prev_punct = m_punct >> 63;
+                prev_alpha6 = m_alpha >> 58;
+                prev_digit3 = m_digit >> 61;
+                prev_d4 = d4 >> 63;
+                prev_space4 = m_space >> 60;
+            )?
+        }};
+    }
+
+    let mut i = 0usize;
+    while i + 64 <= len {
+        // SAFETY: `i + 64 <= len`; `_mm256_loadu_si256` permits unaligned loads.
+        let c0 = _mm256_loadu_si256(ptr.add(i) as *const __m256i);
+        let c1 = _mm256_loadu_si256(ptr.add(i + 32) as *const __m256i);
+        if _mm256_movemask_epi8(_mm256_or_si256(c0, c1)) != 0 {
+            if pending_single_alpha != 0 {
+                if TOKEN_BYTE_CLASS[buf[i] as usize] != CLS_ALPHA {
+                    units2 -= 4;
+                }
+                pending_single_alpha = 0;
+            }
+            prev_alpha6 = 0;
+            prev_space4 = 0;
+            prev_punct = 0;
+            prev_digit3 = 0;
+            prev_d4 = 0;
+            units2 += estimate_tokens_units_scalar(&buf[i..i + 64]) * 2;
+            i += 64;
+            continue;
+        }
+        accum_64!(c0, c1, u64::MAX, save_carry);
+        i += 64;
+    }
+
+    let rem = len - i;
+    if rem > 0 {
+        let (c0, c1) = if rem >= 32 {
+            let mut tail = [0u8; 32];
+            let rem2 = rem - 32;
+            if rem2 > 0 {
+                // SAFETY: `i + 32 + rem2 == len` and `rem2 < 32`.
+                std::ptr::copy_nonoverlapping(ptr.add(i + 32), tail.as_mut_ptr(), rem2);
+            }
+            (
+                _mm256_loadu_si256(ptr.add(i) as *const __m256i),
+                _mm256_loadu_si256(tail.as_ptr() as *const __m256i),
+            )
+        } else {
+            let mut tail = [0u8; 32];
+            // SAFETY: `i + rem == len` and `rem < 32`.
+            std::ptr::copy_nonoverlapping(ptr.add(i), tail.as_mut_ptr(), rem);
+            (
+                _mm256_loadu_si256(tail.as_ptr() as *const __m256i),
+                _mm256_setzero_si256(),
+            )
+        };
+        if _mm256_movemask_epi8(_mm256_or_si256(c0, c1)) != 0 {
+            if pending_single_alpha != 0 {
+                if TOKEN_BYTE_CLASS[buf[i] as usize] != CLS_ALPHA {
+                    units2 -= 4;
+                }
+                pending_single_alpha = 0;
+            }
+            units2 += estimate_tokens_units_scalar(&buf[i..len]) * 2;
+        } else {
+            accum_64!(c0, c1, (1u64 << rem) - 1);
+            pending_single_alpha = 0;
+        }
+    }
+
+    if pending_single_alpha != 0 {
+        units2 -= 4;
+    }
+
+    let est = (units2 + 8) / 16;
+    let clamped = est.max(1);
+    u32::try_from(clamped).unwrap_or(u32::MAX)
+}
+
+/// Fast single-pass token estimator calibrated within ~10% of modern BPE
+/// tokenizers across JSON, source code, English prose, and UTF-8 multibyte text.
+///
+/// Uses a 32-byte/iteration AVX2+POPCNT bitmask fast path on x86/x86_64 ASCII
+/// spans with seamless scalar fallback on non-ASCII chunks.
+///
+/// Always returns `0` on empty input and at least `1` on any non-empty input.
+#[inline]
+pub fn estimate_tokens_fast(buf: &[u8]) -> u32 {
+    if buf.is_empty() {
+        return 0;
+    }
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if buf.len() >= 32
+            && std::is_x86_feature_detected!("avx2")
+            && std::is_x86_feature_detected!("popcnt")
+        {
+            // SAFETY: Runtime feature detection verified AVX2 and POPCNT are available.
+            return unsafe { estimate_tokens_avx2(buf) };
+        }
+    }
+    estimate_tokens_scalar(buf)
 }
 
 // ============================================================================
@@ -432,23 +1041,25 @@ impl<const C: usize, const D: usize> SipHasher<C, D> {
             data = &data[need..];
         }
 
-        let mut i = 0usize;
-        while i + 8 <= data.len() {
+        let (mut v0, mut v1, mut v2, mut v3) = (self.v0, self.v1, self.v2, self.v3);
+        let chunks = data.chunks_exact(8);
+        let rem = chunks.remainder();
+        for chunk in chunks {
             let m = u64::from_le_bytes([
-                data[i],
-                data[i + 1],
-                data[i + 2],
-                data[i + 3],
-                data[i + 4],
-                data[i + 5],
-                data[i + 6],
-                data[i + 7],
+                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
             ]);
-            self.compress(m);
-            i += 8;
+            v3 ^= m;
+            for _ in 0..C {
+                sipround(&mut v0, &mut v1, &mut v2, &mut v3);
+            }
+            v0 ^= m;
         }
+        self.v0 = v0;
+        self.v1 = v1;
+        self.v2 = v2;
+        self.v3 = v3;
 
-        for &b in &data[i..] {
+        for &b in rem {
             self.tail |= (b as u64) << (self.ntail * 8);
             self.ntail += 1;
         }
@@ -463,6 +1074,26 @@ impl<const C: usize, const D: usize> SipHasher<C, D> {
             sipround(&mut self.v0, &mut self.v1, &mut self.v2, &mut self.v3);
         }
         self.v0 ^ self.v1 ^ self.v2 ^ self.v3
+    }
+}
+
+/// Streaming SipHash-1-3 hasher for zero-allocation normalized block hashing.
+pub(crate) struct KeyedHasher(SipHasher<1, 3>);
+
+impl KeyedHasher {
+    #[inline]
+    pub(crate) fn new(key: &[u8; 16]) -> Self {
+        Self(SipHasher::<1, 3>::new(key))
+    }
+
+    #[inline]
+    pub(crate) fn write(&mut self, data: &[u8]) {
+        self.0.write(data);
+    }
+
+    #[inline]
+    pub(crate) fn finish(self) -> u64 {
+        self.0.finish()
     }
 }
 
@@ -585,7 +1216,7 @@ mod tests {
 
         // Ensure backend string is one of the documented names.
         let name = simd_backend_name();
-        assert!(name == "avx2" || name == "scalar-u64");
+        assert!(name == "avx2" || name == "neon" || name == "scalar-u64");
     }
 
     #[test]
@@ -770,5 +1401,121 @@ mod tests {
                 assert_eq!(find_json_special_byte_scalar(&v), pos);
             }
         }
+    }
+
+    #[test]
+    fn test_find_any3_byte_avx2_vs_scalar() {
+        let mut buf = vec![b'a'; 300];
+        for i in (0..buf.len()).step_by(7) {
+            buf[i] = 0xE2;
+        }
+        // Exhaustive no-match across lengths and alignments.
+        for len in 0..=260 {
+            for align in 0..=32 {
+                if align + len > buf.len() {
+                    continue;
+                }
+                let slice = &buf[align..align + len];
+                assert_eq!(
+                    find_any3_byte(slice, b'-', b'_', b':'),
+                    find_any3_byte_scalar(slice, b'-', b'_', b':')
+                );
+                assert_eq!(find_any3_byte(slice, b'-', b'_', b':'), len);
+            }
+        }
+        // Single hit at every boundary and alignment for each of the 3 target bytes.
+        for &target in &[b'-', b'_', b':', 0x00u8, 0x7Fu8, 0x80u8, 0xFFu8] {
+            for pos in [
+                0usize, 1, 7, 15, 16, 17, 31, 32, 33, 63, 64, 65, 95, 96, 127, 128, 199,
+            ] {
+                let mut v = vec![b'x'; 200];
+                v[pos] = target;
+                assert_eq!(find_any3_byte(&v, b'-', b'_', target), pos);
+                assert_eq!(find_any3_byte_scalar(&v, b'-', b'_', target), pos);
+                assert_eq!(find_any3_byte(&v, target, b'_', b':'), pos);
+                assert_eq!(find_any3_byte(&v, b'-', target, b':'), pos);
+            }
+        }
+        // Multiple hits returns strictly the earliest offset.
+        let mut multi = vec![b'z'; 128];
+        multi[33] = b':';
+        multi[40] = b'-';
+        multi[64] = b'_';
+        assert_eq!(find_any3_byte(&multi, b'-', b'_', b':'), 33);
+        assert_eq!(find_any3_byte(&multi[34..], b'-', b'_', b':'), 6);
+        assert_eq!(find_any3_byte(&multi[41..], b'-', b'_', b':'), 23);
+        assert_eq!(find_any3_byte(&multi[65..], b'-', b'_', b':'), 63);
+    }
+
+    #[test]
+    fn test_estimate_tokens_fast_simd_vs_scalar_parity() {
+        let samples: &[&[u8]] = &[
+            b"The quick brown fox jumps over the lazy dog.",
+            br#"{"role":"user","content":"Hello world","model":"claude-sonnet-4"}"#,
+            b"pub fn longest_common_prefix_len(a: &[u8], b: &[u8]) -> usize {",
+            b"a b c d e f g h i j k l m n o p q r s t u v w x y z A B C D E F G H I J",
+            b"supercalifragilisticexpialidocious internationalization synchronization determinism",
+            b"0 12 123 1234 12345 123456 1234567 1234567890 2026-11-22T15:48:57Z 1732290537",
+            b"    four        eight            twelve                sixteen\n\n\nline4\r\n",
+            "Current time: ⟦cp:v1⟧ | Trace: ⟦cp:v2⟧ | Session: ⟦cp:v3⟧\nYou are an autonomous systems engineer working on a shared repository with こんにちは世界 and 🚀🔥.".as_bytes(),
+        ];
+
+        // Test every sample directly and also repeated across many 32-byte boundaries & offsets.
+        for &sample in samples {
+            let simd = estimate_tokens_fast(sample);
+            let scalar = estimate_tokens_scalar(sample);
+            let diff = simd.abs_diff(scalar);
+            let max_allowed = ((scalar as f64) * 0.05).ceil().max(1.0) as u32;
+            assert!(
+                diff <= max_allowed,
+                "SIMD ({simd}) vs scalar ({scalar}) diverged by {diff} (> {max_allowed}) on {:?}",
+                String::from_utf8_lossy(sample)
+            );
+
+            // Repeat to create multi-kilobyte payloads crossing dozens of 32-byte boundaries.
+            let mut big = Vec::with_capacity(sample.len() * 40);
+            for _ in 0..40 {
+                big.extend_from_slice(sample);
+                big.push(b' ');
+            }
+            for trim in [0usize, 1, 7, 15, 16, 31, 32, 33, 62, 63, 64, 65] {
+                if trim < big.len() {
+                    let s = &big[trim..];
+                    let simd_b = estimate_tokens_fast(s);
+                    let scalar_b = estimate_tokens_scalar(s);
+                    let diff_b = simd_b.abs_diff(scalar_b);
+                    let max_b = ((scalar_b as f64) * 0.05).ceil().max(2.0) as u32;
+                    assert!(
+                        diff_b <= max_b,
+                        "Big trim={trim}: SIMD ({simd_b}) vs scalar ({scalar_b}) diverged by {diff_b} (> {max_b})"
+                    );
+                }
+            }
+        }
+
+        // Targeted 64-byte chunk boundary carry tests (single-alpha, long-alpha, digits, spaces).
+        let boundary_cases = [
+            format!("{}a ", " ".repeat(63)),
+            format!("{}ab ", " ".repeat(63)),
+            format!("{}abcdefghij", " ".repeat(60)),
+            format!("{}12345678 ", " ".repeat(61)),
+            format!("{}        word", "x".repeat(61)),
+            format!("{}x", " ".repeat(63)),
+        ];
+        for case in &boundary_cases {
+            let b = case.as_bytes();
+            let simd = estimate_tokens_fast(b);
+            let scalar = estimate_tokens_scalar(b);
+            assert!(
+                simd.abs_diff(scalar) <= 1,
+                "64-byte boundary mismatch on len {}: simd={simd} scalar={scalar}",
+                b.len()
+            );
+        }
+
+        // Verify multi-outer-loop count_byte (> 255 * 16 = 4080 bytes for NEON accumulator flush).
+        let big_count = vec![b'a'; 5000];
+        assert_eq!(count_byte_simd(&big_count, b'a'), 5000);
+        assert_eq!(count_byte_simd(&big_count, b'b'), 0);
     }
 }

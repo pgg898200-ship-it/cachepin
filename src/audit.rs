@@ -205,7 +205,7 @@ fn escape_json_str(s: &str) -> String {
 }
 
 /// Audit a JSONL trace file OR recursively scan a directory of `.jsonl` files
-/// (including native Claude Code `~/.claude/projects/` session transcripts).
+/// (including native Claude Code `~/.claude/projects/` and OpenAI Codex `~/.codex/sessions/`).
 pub fn audit_jsonl_file(
     path: &Path,
     mode: CanonicalMode,
@@ -223,6 +223,31 @@ pub fn audit_jsonl_file(
     let file = File::open(path).map_err(|e| format!("failed to open {}: {}", path.display(), e))?;
     let reader = BufReader::with_capacity(256 * 1024, file);
     audit_jsonl_reader(reader, mode, provider_hint)
+}
+
+/// Audit multiple JSONL trace files or directories in one pass (powers `cachepin audit --auto`).
+pub fn audit_multiple_paths(
+    paths: &[std::path::PathBuf],
+    mode: CanonicalMode,
+    provider_hint: Option<ProviderFormat>,
+) -> Result<AuditReport, String> {
+    let mut files = Vec::new();
+    for p in paths {
+        if !p.exists() {
+            continue;
+        }
+        if p.is_dir() {
+            collect_jsonl_files(p, &mut files, 0)?;
+        } else if p.is_file() {
+            files.push(p.clone());
+        }
+    }
+    if files.is_empty() {
+        return Err("no .jsonl files found in any target path".to_string());
+    }
+    files.sort();
+    files.dedup();
+    audit_jsonl_files(&files, mode, provider_hint)
 }
 
 fn collect_jsonl_files(
@@ -275,7 +300,8 @@ fn audit_jsonl_files(
 
 /// Audit any streaming `BufRead` containing newline-delimited LLM request payloads,
 /// trace wrapper objects `{"timestamp_ms":..., "tenant":..., "request": {...}}`,
-/// OR native Claude Code session transcripts (`~/.claude/projects/*/*.jsonl`).
+/// native Claude Code session transcripts (`~/.claude/projects/*/*.jsonl`),
+/// or OpenAI Codex / API usage logs (`~/.codex/sessions/**/*.jsonl`).
 pub fn audit_jsonl_reader<R: BufRead>(
     reader: R,
     mode: CanonicalMode,
@@ -348,9 +374,10 @@ pub fn audit_jsonl_reader<R: BufRead>(
                 ts_ms,
                 payload,
             } => (tenant, ts_ms, payload),
-            AuditRecord::ClaudeCodeTurn {
+            AuditRecord::UsageTurn {
                 session_id,
                 model,
+                provider,
                 ts_ms,
                 input_tokens,
                 cache_creation_tokens,
@@ -365,7 +392,8 @@ pub fn audit_jsonl_reader<R: BufRead>(
                     continue;
                 }
                 requests_analyzed += 1;
-                let pricing = lookup_pricing(&model, ProviderFormat::AnthropicMessages);
+                let pricing = lookup_pricing(&model, provider);
+                let is_anthropic = provider == ProviderFormat::AnthropicMessages;
                 let raw_cost = pricing.cost_input(input_tokens)
                     + pricing.cost_write(cache_creation_tokens, crate::types::CacheTtl::FiveMin)
                     + pricing.cost_read(cache_read_tokens);
@@ -380,38 +408,43 @@ pub fn audit_jsonl_reader<R: BufRead>(
                     0
                 };
 
-                // Classify billing event:
-                // - ColdStart: first turn of session
-                // - TtlExpired: inter-turn gap > 300s with cache rewrite spike (>= 512 tokens)
-                // - PrefixMutation: inter-turn gap <= 300s yet cache_creation spiked and cache_read dropped
-                // - CacheHit: steady incremental growth / cache reuse
+                let uncached_mass = if is_anthropic {
+                    cache_creation_tokens
+                } else {
+                    input_tokens
+                };
+                let min_tok = pricing.min_cache_tokens as u64;
+
                 let (reason, recoverable_tokens, advice) = if prev_turns == 0 {
                     (
                         MissReason::ColdStart,
                         0u64,
                         "Initial session turn warmed the prompt cache.".to_string(),
                     )
-                } else if gap_secs > 300 && cache_creation_tokens >= pricing.min_cache_tokens as u64 {
-                    let rec = cache_creation_tokens.min(prev_prefix.max(cache_creation_tokens));
+                } else if gap_secs > 300
+                    && uncached_mass >= min_tok
+                    && (is_anthropic || (prev_prefix >= min_tok && cache_read_tokens * 10 < prev_prefix * 7))
+                {
+                    let rec = uncached_mass.min(prev_prefix.max(uncached_mass));
                     (
                         MissReason::TtlExpired,
                         rec,
                         format!(
-                            "5m cache TTL expired after {}s gap ({} tokens rewritten); enable 1h DP tier or 270s keepalive.",
-                            gap_secs, cache_creation_tokens
+                            "Cache TTL expired after {}s gap ({} tokens re-prefilled); enable 1h DP tier or 270s keepalive.",
+                            gap_secs, uncached_mass
                         ),
                     )
-                } else if cache_creation_tokens >= pricing.min_cache_tokens as u64
-                    && prev_prefix >= pricing.min_cache_tokens as u64
+                } else if uncached_mass >= min_tok
+                    && prev_prefix >= min_tok
                     && cache_read_tokens * 10 < prev_prefix * 7
                 {
-                    let rec = cache_creation_tokens.min(prev_prefix);
+                    let rec = uncached_mass.min(prev_prefix);
                     (
                         MissReason::PrefixMutation,
                         rec,
                         format!(
-                            "Mid-session cache break ({}s after prior turn: cache_read dropped {} -> {}, {} rewritten); proxy through `cachepin proxy` to freeze tool/key/volatile drift.",
-                            gap_secs, prev_prefix, cache_read_tokens, cache_creation_tokens
+                            "Mid-session cache break ({}s after prior turn: cache_read dropped {} -> {}, {} re-prefilled); proxy through `cachepin proxy` to freeze tool/key/volatile drift.",
+                            gap_secs, prev_prefix, cache_read_tokens, uncached_mass
                         ),
                     )
                 } else {
@@ -423,9 +456,12 @@ pub fn audit_jsonl_reader<R: BufRead>(
                 };
 
                 let wasted_usd = if recoverable_tokens > 0 {
-                    (pricing.cost_write(recoverable_tokens, crate::types::CacheTtl::FiveMin)
-                        - pricing.cost_read(recoverable_tokens))
-                    .max(0.0)
+                    let miss_cost = if is_anthropic {
+                        pricing.cost_write(recoverable_tokens, crate::types::CacheTtl::FiveMin)
+                    } else {
+                        pricing.cost_input(recoverable_tokens)
+                    };
+                    (miss_cost - pricing.cost_read(recoverable_tokens)).max(0.0)
                 } else {
                     0.0
                 };
@@ -455,7 +491,11 @@ pub fn audit_jsonl_reader<R: BufRead>(
                     }
                 }
 
-                let active_prefix = cache_read_tokens.saturating_add(cache_creation_tokens);
+                let active_prefix = if is_anthropic {
+                    cache_read_tokens.saturating_add(cache_creation_tokens)
+                } else {
+                    turn_total
+                };
                 cc_sessions.insert(session_id, (ts_ms, active_prefix, prev_turns + 1));
                 continue;
             }
@@ -635,9 +675,10 @@ enum AuditRecord {
         ts_ms: u64,
         payload: Vec<u8>,
     },
-    ClaudeCodeTurn {
+    UsageTurn {
         session_id: String,
         model: String,
+        provider: ProviderFormat,
         ts_ms: u64,
         input_tokens: u64,
         cache_creation_tokens: u64,
@@ -667,7 +708,6 @@ fn decode_audit_record(line: &[u8], default_ts: u64) -> Option<AuditRecord> {
         });
     }
     // 2. Native Claude Code local session transcript (`~/.claude/projects/*/*.jsonl`)
-    //    Format: {"type":"assistant","timestamp":"2026-...Z","sessionId":"...","message":{"model":"...","usage":{...}}}
     if let Some(msg) = val.get("message") {
         if let Some(usage) = msg.get("usage") {
             let input_tokens = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -697,9 +737,10 @@ fn decode_audit_record(line: &[u8], default_ts: u64) -> Option<AuditRecord> {
                     .and_then(parse_iso8601_epoch_ms)
                     .or_else(|| val.get("timestamp_ms").and_then(|v| v.as_u64()))
                     .unwrap_or(default_ts);
-                return Some(AuditRecord::ClaudeCodeTurn {
+                return Some(AuditRecord::UsageTurn {
                     session_id,
                     model,
+                    provider: ProviderFormat::AnthropicMessages,
                     ts_ms,
                     input_tokens,
                     cache_creation_tokens,
@@ -708,7 +749,118 @@ fn decode_audit_record(line: &[u8], default_ts: u64) -> Option<AuditRecord> {
             }
         }
     }
-    // 3. Direct Anthropic/OpenAI request JSON
+    // 3. Native OpenAI Codex CLI session transcript (`~/.codex/sessions/**/*.jsonl`)
+    //    Format: {"type":"event_msg","timestamp":"...","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":...,"cached_input_tokens":...}}}}
+    if val.get("type").and_then(|v| v.as_str()) == Some("event_msg") {
+        if let Some(payload) = val.get("payload") {
+            if payload.get("type").and_then(|v| v.as_str()) == Some("token_count") {
+                if let Some(last) = payload
+                    .get("info")
+                    .and_then(|i| i.get("last_token_usage"))
+                {
+                    let total_in = last.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let cached = last
+                        .get("cached_input_tokens")
+                        .or_else(|| last.get("cached_tokens"))
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    if total_in > 0 {
+                        let uncached = total_in.saturating_sub(cached);
+                        let ts_ms = val
+                            .get("timestamp")
+                            .and_then(|v| v.as_str())
+                            .and_then(parse_iso8601_epoch_ms)
+                            .unwrap_or(default_ts);
+                        let session_id = val
+                            .get("session_id")
+                            .or_else(|| val.get("sessionId"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("codex-session")
+                            .to_string();
+                        let model = payload
+                            .get("model")
+                            .or_else(|| val.get("model"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("gpt-5.6")
+                            .to_string();
+                        return Some(AuditRecord::UsageTurn {
+                            session_id,
+                            model,
+                            provider: ProviderFormat::OpenAiResponses,
+                            ts_ms,
+                            input_tokens: uncached,
+                            cache_creation_tokens: 0,
+                            cache_read_tokens: cached,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    // 4. Generic OpenAI Chat/Responses API response usage logs
+    //    {"model":"gpt-5.6","usage":{"prompt_tokens":...,"prompt_tokens_details":{"cached_tokens":...}}}
+    if let Some(usage) = val.get("usage") {
+        let total_in = usage
+            .get("prompt_tokens")
+            .or_else(|| usage.get("input_tokens"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let cached = usage
+            .get("prompt_tokens_details")
+            .and_then(|d| d.get("cached_tokens"))
+            .or_else(|| {
+                usage
+                    .get("input_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+            })
+            .or_else(|| usage.get("cache_read_input_tokens"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let created = usage
+            .get("cache_creation_input_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        if total_in + created + cached > 0 {
+            let model = val
+                .get("model")
+                .and_then(|v| v.as_str())
+                .unwrap_or("gpt-5.6")
+                .to_string();
+            let is_anth = model.to_ascii_lowercase().starts_with("claude") || created > 0;
+            let uncached = if is_anth {
+                total_in
+            } else {
+                total_in.saturating_sub(cached)
+            };
+            let ts_ms = val
+                .get("timestamp")
+                .and_then(|v| v.as_str())
+                .and_then(parse_iso8601_epoch_ms)
+                .or_else(|| val.get("timestamp_ms").and_then(|v| v.as_u64()))
+                .or_else(|| val.get("created").and_then(|v| v.as_u64()).map(|s| s * 1000))
+                .unwrap_or(default_ts);
+            let session_id = val
+                .get("session_id")
+                .or_else(|| val.get("sessionId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("api-session")
+                .to_string();
+            return Some(AuditRecord::UsageTurn {
+                session_id,
+                model,
+                provider: if is_anth {
+                    ProviderFormat::AnthropicMessages
+                } else {
+                    ProviderFormat::OpenAiChat
+                },
+                ts_ms,
+                input_tokens: uncached,
+                cache_creation_tokens: created,
+                cache_read_tokens: cached,
+            });
+        }
+    }
+    // 5. Direct Anthropic/OpenAI request JSON
     if val.get("messages").is_some() || val.get("input").is_some() || val.get("system").is_some() {
         let tenant = val
             .get("user")
@@ -723,6 +875,244 @@ fn decode_audit_record(line: &[u8], default_ts: u64) -> Option<AuditRecord> {
         });
     }
     None
+}
+
+// ============================================================================
+// Instant Two-Request Prefix Diff Forensics (`cachepin diff <a.json> <b.json>`)
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub struct DiffReport {
+    pub model: String,
+    pub provider: ProviderFormat,
+    pub raw_len_a: usize,
+    pub raw_len_b: usize,
+    pub raw_lcp_bytes: usize,
+    pub raw_match_pct: f64,
+    pub raw_context_before: String,
+    pub raw_diff_a: String,
+    pub raw_diff_b: String,
+    pub reason: MissReason,
+    pub divergence_path: Option<String>,
+    pub raw_matched_tokens: u32,
+    pub opt_matched_tokens: u32,
+    pub total_tokens: u32,
+    pub raw_hit_pct: f64,
+    pub opt_hit_pct: f64,
+    pub wasted_usd_per_1k_reqs: f64,
+    pub tools_reordered: bool,
+    pub json_keys_reordered: bool,
+    pub volatile_spans_hoisted: usize,
+    pub all_gather_reordered: bool,
+    pub advice: String,
+}
+
+impl DiffReport {
+    pub fn to_json_string(&self) -> String {
+        format!(
+            "{{\"model\":\"{}\",\"provider\":\"{}\",\"raw_len_a\":{},\"raw_len_b\":{},\"raw_lcp_bytes\":{},\"raw_match_pct\":{:.2},\"reason\":\"{}\",\"divergence_path\":{},\"raw_matched_tokens\":{},\"opt_matched_tokens\":{},\"total_tokens\":{},\"raw_hit_pct\":{:.2},\"opt_hit_pct\":{:.2},\"wasted_usd_per_1k_reqs\":{:.4},\"repairs\":{{\"tools_reordered\":{},\"json_keys_reordered\":{},\"volatile_spans_hoisted\":{},\"all_gather_reordered\":{}}},\"raw_context_before\":\"{}\",\"raw_diff_a\":\"{}\",\"raw_diff_b\":\"{}\",\"advice\":\"{}\"}}",
+            escape_json_str(&self.model),
+            self.provider.as_str(),
+            self.raw_len_a,
+            self.raw_len_b,
+            self.raw_lcp_bytes,
+            self.raw_match_pct,
+            self.reason.as_str(),
+            match &self.divergence_path {
+                Some(p) => format!("\"{}\"", escape_json_str(p)),
+                None => "null".to_string(),
+            },
+            self.raw_matched_tokens,
+            self.opt_matched_tokens,
+            self.total_tokens,
+            self.raw_hit_pct,
+            self.opt_hit_pct,
+            self.wasted_usd_per_1k_reqs,
+            self.tools_reordered,
+            self.json_keys_reordered,
+            self.volatile_spans_hoisted,
+            self.all_gather_reordered,
+            escape_json_str(&self.raw_context_before),
+            escape_json_str(&self.raw_diff_a),
+            escape_json_str(&self.raw_diff_b),
+            escape_json_str(&self.advice),
+        )
+    }
+
+    pub fn format_human(&self) -> String {
+        let mut s = String::new();
+        s.push_str("========================================================================\n");
+        s.push_str("  cachepin diff — SIMD Byte-Level Prompt Prefix Forensics\n");
+        s.push_str("========================================================================\n");
+        s.push_str(&format!(
+            "  Model / Provider  : {} ({})\n",
+            self.model,
+            self.provider.as_str()
+        ));
+        s.push_str(&format!(
+            "  Raw byte LCP      : {} / {} bytes ({:.2}% raw byte match)\n",
+            self.raw_lcp_bytes,
+            self.raw_len_a.min(self.raw_len_b),
+            self.raw_match_pct
+        ));
+        s.push_str(&format!(
+            "  Miss root cause   : {}  (block path: {})\n",
+            self.reason.as_str(),
+            self.divergence_path.as_deref().unwrap_or("none")
+        ));
+        s.push_str("------------------------------------------------------------------------\n");
+        s.push_str(&format!(
+            "  RAW cache hit     : {:6.2}% ({} / {} tokens)\n",
+            self.raw_hit_pct, self.raw_matched_tokens, self.total_tokens
+        ));
+        s.push_str(&format!(
+            "  AFTER cachepin    : {:6.2}% ({} / {} tokens)\n",
+            self.opt_hit_pct, self.opt_matched_tokens, self.total_tokens
+        ));
+        s.push_str(&format!(
+            "  Est. waste/1k req : ${:.2} saved per 1,000 requests\n",
+            self.wasted_usd_per_1k_reqs
+        ));
+        s.push_str(&format!(
+            "  Repairs applied   : tools_sorted={} json_keys_sorted={} volatile_hoisted={} all_gather={}\n",
+            self.tools_reordered,
+            self.json_keys_reordered,
+            self.volatile_spans_hoisted,
+            self.all_gather_reordered
+        ));
+        if !self.raw_diff_a.is_empty() || !self.raw_diff_b.is_empty() {
+            s.push_str("------------------------------------------------------------------------\n");
+            s.push_str(&format!("  First divergence @ byte {}:\n", self.raw_lcp_bytes));
+            s.push_str(&format!(
+                "    A: ...{}|{}\n",
+                self.raw_context_before, self.raw_diff_a
+            ));
+            s.push_str(&format!(
+                "    B: ...{}|{}\n",
+                self.raw_context_before, self.raw_diff_b
+            ));
+        }
+        s.push_str(&format!("\n  Fix: {}\n", self.advice));
+        s.push_str("========================================================================\n");
+        s
+    }
+}
+
+fn safe_utf8_window(bytes: &[u8], start: usize, end: usize) -> String {
+    let s = start.min(bytes.len());
+    let e = end.min(bytes.len());
+    if s >= e {
+        return String::new();
+    }
+    String::from_utf8_lossy(&bytes[s..e])
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
+/// Compare two consecutive/peer LLM request JSON payloads with SIMD LCP diff and
+/// counterfactual `cachepin` canonicalization.
+pub fn diff_two_requests(
+    req_a: &[u8],
+    req_b: &[u8],
+    mode: CanonicalMode,
+    provider_hint: Option<ProviderFormat>,
+) -> Result<DiffReport, String> {
+    let raw_lcp_bytes = crate::simd::longest_common_prefix_len(req_a, req_b);
+    let min_len = req_a.len().min(req_b.len()).max(1);
+    let raw_match_pct = (raw_lcp_bytes as f64 / min_len as f64) * 100.0;
+    let ctx_start = raw_lcp_bytes.saturating_sub(36);
+    let raw_context_before = safe_utf8_window(req_a, ctx_start, raw_lcp_bytes);
+    let raw_diff_a = safe_utf8_window(req_a, raw_lcp_bytes, raw_lcp_bytes + 64);
+    let raw_diff_b = safe_utf8_window(req_b, raw_lcp_bytes, raw_lcp_bytes + 64);
+
+    let mut raw_cfg = CompilerConfig::default();
+    raw_cfg.mode = CanonicalMode::ObserveOnly;
+    let raw_compiler = PrefixCompiler::new(raw_cfg);
+
+    let mut opt_cfg = CompilerConfig::default();
+    opt_cfg.mode = mode;
+    let opt_compiler = PrefixCompiler::new(opt_cfg);
+
+    let raw_a = raw_compiler.compile_request("diff", req_a, provider_hint)?;
+    let raw_b = raw_compiler.compile_request("diff", req_b, provider_hint)?;
+    let opt_a = opt_compiler.compile_request("diff", req_a, provider_hint)?;
+    let opt_b = opt_compiler.compile_request("diff", req_b, provider_hint)?;
+
+    let pricing = lookup_pricing(&opt_b.model, opt_b.provider);
+    let ts1 = 1_700_000_000_000u64;
+    let ts2 = ts1 + 5_000;
+
+    let mut raw_radix = PrefixRadixTree::new(1024);
+    let raw_reuse_a = raw_radix.estimate_reuse_profile(1, &raw_a.model, &raw_a.blocks, ts1);
+    let raw_plan_a = solve_optimal_breakpoints(&raw_a.blocks, &raw_reuse_a, &pricing);
+    raw_radix.record_request(1, &raw_a.model, &raw_a.blocks, &raw_plan_a.breakpoints, ts1);
+    let raw_diag = raw_radix.lookup_and_diagnose(
+        1,
+        &raw_b.model,
+        &raw_b.blocks,
+        ts2,
+        &pricing,
+        opt_a.tools_reordered || opt_b.tools_reordered,
+        opt_a.json_keys_reordered || opt_b.json_keys_reordered,
+        opt_a.volatile_spans_hoisted.max(opt_b.volatile_spans_hoisted),
+        opt_a.all_gather_reordered || opt_b.all_gather_reordered,
+    );
+
+    let mut opt_radix = PrefixRadixTree::new(1024);
+    let opt_reuse_a = opt_radix.estimate_reuse_profile(1, &opt_a.model, &opt_a.blocks, ts1);
+    let opt_plan_a = solve_optimal_breakpoints(&opt_a.blocks, &opt_reuse_a, &pricing);
+    opt_radix.record_request(1, &opt_a.model, &opt_a.blocks, &opt_plan_a.breakpoints, ts1);
+    let opt_diag = opt_radix.lookup_and_diagnose(
+        1,
+        &opt_b.model,
+        &opt_b.blocks,
+        ts2,
+        &pricing,
+        false,
+        false,
+        0,
+        false,
+    );
+
+    let total_tokens = raw_b.total_est_tokens.max(1);
+    let raw_matched = raw_diag.matched_tokens.min(total_tokens);
+    let opt_matched = opt_diag.matched_tokens.min(total_tokens);
+    let recovered = opt_matched.saturating_sub(raw_matched) as u64;
+    let wasted_per_req = if recovered > 0 {
+        (pricing.cost_write(recovered, crate::types::CacheTtl::FiveMin) - pricing.cost_read(recovered))
+            .max(0.0)
+    } else {
+        raw_diag.wasted_usd_est
+    };
+
+    Ok(DiffReport {
+        model: if opt_b.model.is_empty() {
+            "unknown".to_string()
+        } else {
+            opt_b.model.clone()
+        },
+        provider: opt_b.provider,
+        raw_len_a: req_a.len(),
+        raw_len_b: req_b.len(),
+        raw_lcp_bytes,
+        raw_match_pct,
+        raw_context_before,
+        raw_diff_a,
+        raw_diff_b,
+        reason: raw_diag.reason,
+        divergence_path: raw_diag.divergence_path,
+        raw_matched_tokens: raw_matched,
+        opt_matched_tokens: opt_matched,
+        total_tokens,
+        raw_hit_pct: (raw_matched as f64 / total_tokens as f64) * 100.0,
+        opt_hit_pct: (opt_matched as f64 / total_tokens as f64) * 100.0,
+        wasted_usd_per_1k_reqs: wasted_per_req * 1000.0,
+        tools_reordered: opt_a.tools_reordered || opt_b.tools_reordered,
+        json_keys_reordered: opt_a.json_keys_reordered || opt_b.json_keys_reordered,
+        volatile_spans_hoisted: opt_a.volatile_spans_hoisted + opt_b.volatile_spans_hoisted,
+        all_gather_reordered: opt_a.all_gather_reordered || opt_b.all_gather_reordered,
+        advice: raw_diag.advice,
+    })
 }
 
 /// Pure-Rust ISO-8601 UTC timestamp parser (`YYYY-MM-DDTHH:MM:SS[.sss]Z`) -> epoch ms.
@@ -779,6 +1169,56 @@ mod tests {
         assert_eq!(rep.miss_counts.get("ttl_expired").copied(), Some(1));
         assert!(rep.opt_hit_rate_pct > rep.raw_hit_rate_pct + 40.0);
         assert!(rep.saved_usd > 0.30);
+    }
+
+    #[test]
+    fn test_codex_cli_and_openai_usage_audit() {
+        let trace = concat!(
+            "{\"type\":\"event_msg\",\"session_id\":\"codex-1\",\"timestamp\":\"2026-11-22T11:00:00Z\",\"payload\":{\"type\":\"token_count\",\"model\":\"gpt-5.6\",\"info\":{\"last_token_usage\":{\"input_tokens\":32000,\"cached_input_tokens\":0}}}}\n",
+            "{\"type\":\"event_msg\",\"session_id\":\"codex-1\",\"timestamp\":\"2026-11-22T11:00:25Z\",\"payload\":{\"type\":\"token_count\",\"model\":\"gpt-5.6\",\"info\":{\"last_token_usage\":{\"input_tokens\":32400,\"cached_input_tokens\":31800}}}}\n",
+            "{\"type\":\"event_msg\",\"session_id\":\"codex-1\",\"timestamp\":\"2026-11-22T11:00:50Z\",\"payload\":{\"type\":\"token_count\",\"model\":\"gpt-5.6\",\"info\":{\"last_token_usage\":{\"input_tokens\":33000,\"cached_input_tokens\":0}}}}\n",
+            "{\"model\":\"gpt-5.6\",\"session_id\":\"api-1\",\"timestamp\":\"2026-11-22T11:01:00Z\",\"usage\":{\"prompt_tokens\":20000,\"prompt_tokens_details\":{\"cached_tokens\":0}}}\n",
+            "{\"model\":\"gpt-5.6\",\"session_id\":\"api-1\",\"timestamp\":\"2026-11-22T11:08:00Z\",\"usage\":{\"prompt_tokens\":20500,\"prompt_tokens_details\":{\"cached_tokens\":0}}}\n"
+        );
+        let rep = audit_jsonl_reader(
+            BufReader::new(trace.as_bytes()),
+            CanonicalMode::SwarmAlign,
+            None,
+        )
+        .expect("audit codex + openai usage");
+        assert_eq!(rep.requests_analyzed, 5);
+        assert_eq!(rep.miss_counts.get("cold_start").copied(), Some(2));
+        assert_eq!(rep.miss_counts.get("cache_hit").copied(), Some(1));
+        assert_eq!(rep.miss_counts.get("prefix_mutation").copied(), Some(1));
+        assert_eq!(rep.miss_counts.get("ttl_expired").copied(), Some(1));
+        assert!(rep.saved_usd > 0.05);
+    }
+
+    #[test]
+    fn test_diff_two_requests_recovers_shared_prefix() {
+        let doc = "Shared repository specification block for diff forensics. ".repeat(120);
+        let a = format!(
+            "{{\"model\":\"claude-opus-5-5\",\"tools\":[{{\"name\":\"z_tool\",\"input_schema\":{{\"type\":\"object\"}}}},{{\"name\":\"a_tool\",\"input_schema\":{{\"type\":\"object\"}}}}],\"system\":[{{\"type\":\"text\",\"text\":\"Current time: 2026-11-22T12:00:01Z\\n{}\"}}],\"messages\":[{{\"role\":\"user\",\"content\":\"Agent A task\"}}]}}",
+            doc
+        );
+        let b = format!(
+            "{{\"model\":\"claude-opus-5-5\",\"tools\":[{{\"input_schema\":{{\"type\":\"object\"}},\"name\":\"a_tool\"}},{{\"input_schema\":{{\"type\":\"object\"}},\"name\":\"z_tool\"}}],\"system\":[{{\"type\":\"text\",\"text\":\"Current time: 2026-11-22T12:00:09Z\\n{}\"}}],\"messages\":[{{\"role\":\"user\",\"content\":\"Agent B task\"}}]}}",
+            doc
+        );
+        let diff = diff_two_requests(
+            a.as_bytes(),
+            b.as_bytes(),
+            CanonicalMode::SwarmAlign,
+            Some(ProviderFormat::AnthropicMessages),
+        )
+        .expect("diff succeeds");
+        assert!(diff.raw_hit_pct < 15.0);
+        assert!(diff.opt_hit_pct > 90.0);
+        assert!(diff.tools_reordered);
+        assert!(diff.volatile_spans_hoisted >= 2);
+        assert!(diff.wasted_usd_per_1k_reqs > 1.0);
+        assert!(diff.to_json_string().contains("\"opt_hit_pct\":"));
+        assert!(diff.format_human().contains("cachepin diff"));
     }
 
     #[test]

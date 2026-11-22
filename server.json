@@ -1,49 +1,22 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.pgg898200-ship-it/cachepin",
-  "description": "Zero-dependency Rust + AVX2 lossless multi-agent LLM prompt-cache compiler, exact O(M^2 K) mixed-TTL breakpoint solver, trace forensics auditor, and Shadow-KV router simulator.",
+  "title": "CachePin",
+  "description": "Zero-dep Rust+SIMD LLM prompt-cache compiler, exact mixed-TTL DP solver, auditor & Shadow-KV router",
+  "websiteUrl": "https://pgg898200-ship-it.github.io/cachepin/",
   "repository": {
     "url": "https://github.com/pgg898200-ship-it/cachepin",
     "source": "github"
   },
-  "status": "active",
-  "version_detail": {
-    "version": "0.1.0"
-  },
+  "version": "0.2.0",
   "packages": [
     {
-      "registry_name": "cargo",
-      "name": "cachepin",
-      "version": "0.1.0",
-      "runtime_hint": "cachepin",
-      "package_arguments": [
-        {
-          "type": "positional",
-          "value": "mcp"
-        }
-      ]
-    }
-  ],
-  "tools": [
-    {
-      "name": "optimize_prompt",
-      "description": "Losslessly canonicalize an Anthropic/OpenAI LLM request payload (deterministic JSON keys, sorted tools, bijective volatile hoisting, All-Gather alignment) and compute exact O(M^2 K) mixed-TTL cache breakpoints."
-    },
-    {
-      "name": "diagnose_diff",
-      "description": "Run AVX2 byte-level prefix divergence forensics between two consecutive prompts, classifying root cause and USD waste."
-    },
-    {
-      "name": "plan_breakpoints",
-      "description": "Solve exact constrained mixed-TTL (1h before 5m, K <= 4) cache breakpoints and 270s keepalive break-even."
-    },
-    {
-      "name": "audit_trace",
-      "description": "Audit a JSONL request trace or Claude Code ~/.claude/projects transcript directory for cache misses and counterfactual USD savings."
-    },
-    {
-      "name": "route_simulate",
-      "description": "Simulate multi-backend Shadow-KV adaptive-replication routing against Round-Robin, Least-Loaded, Consistent-Hash, and SingleHome-2xDivert."
+      "registryType": "mcpb",
+      "identifier": "https://github.com/pgg898200-ship-it/cachepin/releases/download/v0.2.0/cachepin-mcp.mcpb",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }

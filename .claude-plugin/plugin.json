@@ -1,6 +1,6 @@
 {
   "name": "cachepin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "100% lossless multi-agent LLM prompt/KV-cache compiler, exact O(M^2 K) mixed-TTL breakpoint solver, TTFT single-flight thundering-herd coalescer, and Shadow-KV adaptive radix router.",
   "author": {
     "name": "CachePin Contributors"

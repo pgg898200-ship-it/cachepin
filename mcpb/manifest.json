@@ -1,0 +1,64 @@
+{
+  "manifest_version": "0.4",
+  "name": "cachepin",
+  "display_name": "CachePin — Multi-Agent LLM Prompt-Cache Compiler",
+  "version": "0.2.0",
+  "description": "Zero-dep Rust+SIMD LLM prompt-cache compiler, exact mixed-TTL DP solver, auditor & Shadow-KV router",
+  "long_description": "Losslessly canonicalizes multi-agent LLM prompts (deterministic JSON keys, sorted tool schemas, bijective volatile timestamp/UUID hoisting, All-Gather shared-block alignment), solves exact O(M^2 K) mixed-TTL (1h/5m) breakpoints, audits Claude Code & Codex session traces, and simulates 8-GPU Shadow-KV routing.",
+  "author": {
+    "name": "CachePin Contributors",
+    "url": "https://github.com/pgg898200-ship-it/cachepin"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pgg898200-ship-it/cachepin"
+  },
+  "homepage": "https://pgg898200-ship-it.github.io/cachepin/",
+  "documentation": "https://github.com/pgg898200-ship-it/cachepin#readme",
+  "license": "MIT",
+  "keywords": [
+    "prompt-cache",
+    "kv-cache",
+    "multi-agent",
+    "llm",
+    "anthropic",
+    "openai",
+    "vllm",
+    "sglang",
+    "simd",
+    "rust"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/cachepin-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/cachepin-mcp",
+      "args": []
+    }
+  },
+  "tools": [
+    {
+      "name": "optimize_prompt",
+      "description": "Losslessly canonicalize an Anthropic/OpenAI request payload and compute exact O(M^2 K) mixed-TTL cache breakpoints."
+    },
+    {
+      "name": "diagnose_diff",
+      "description": "SIMD byte-level prefix divergence forensics between two prompts with root-cause classification and USD waste."
+    },
+    {
+      "name": "plan_breakpoints",
+      "description": "Solve exact constrained mixed-TTL (1h before 5m, K <= 4) breakpoints and 270s keepalive break-even."
+    },
+    {
+      "name": "audit_trace",
+      "description": "Audit a JSONL request trace or Claude Code / Codex transcript directory for cache misses and counterfactual USD savings."
+    },
+    {
+      "name": "route_simulate",
+      "description": "Simulate multi-GPU Shadow-KV adaptive-replication routing against Round-Robin, Least-Loaded, Consistent-Hash, and SingleHome-2xDivert."
+    }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "linux"]
+  }
+}

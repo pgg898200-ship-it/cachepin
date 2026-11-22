@@ -20,10 +20,13 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 use crate::json::{
-    parse_json, serialize_canonical, serialize_canonical_skip_top_key, serialize_json,
-    serialize_json_skip_top_key, JsonValue,
+    estimate_serialized_len, parse_json, serialize_canonical, serialize_canonical_skip_top_key,
+    serialize_json, serialize_json_skip_top_key, write_escaped_key_colon, JsonValue,
 };
-use crate::simd::{chain_hash64, derive_tenant_key, estimate_tokens_fast, keyed_hash64};
+use crate::simd::{
+    chain_hash64, derive_tenant_key, estimate_tokens_fast, find_any3_byte, keyed_hash64,
+    scan_any3_byte, Any3Visitor, KeyedHasher,
+};
 use crate::types::{
     BreakpointPlan, CacheTtl, CanonicalMode, CompileResult, HoistedBinding, PlannedBreakpoint,
     PrefixBlock, ProviderFormat,
@@ -39,6 +42,63 @@ pub const SENTINEL_SUFFIX: &str = "⟧";
 const MAX_SWARM_ENTRIES: usize = 65_536;
 const SWARM_EVICT_TARGET: usize = 32_768;
 const SWARM_DECAY_TAU_SECS: f64 = 300.0;
+
+#[inline]
+fn push_usize(out: &mut String, mut n: usize) {
+    let mut buf = [0u8; 20];
+    let mut idx = buf.len();
+    loop {
+        idx -= 1;
+        buf[idx] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    // SAFETY: All written bytes are ASCII digits `'0'..='9'`.
+    let s = unsafe { std::str::from_utf8_unchecked(&buf[idx..]) };
+    out.push_str(s);
+}
+
+#[inline]
+fn fmt_indexed(prefix: &str, idx: usize, suffix: &str) -> String {
+    let mut s = String::with_capacity(prefix.len() + suffix.len() + 6);
+    s.push_str(prefix);
+    push_usize(&mut s, idx);
+    s.push_str(suffix);
+    s
+}
+
+#[inline]
+fn fmt_msg_part(prefix: &str, msg_idx: usize, mid: &str, part_idx: usize) -> String {
+    let mut s = String::with_capacity(prefix.len() + mid.len() + 12);
+    s.push_str(prefix);
+    push_usize(&mut s, msg_idx);
+    s.push_str(mid);
+    push_usize(&mut s, part_idx);
+    s.push(']');
+    s
+}
+
+/// SIMD-accelerated search for the 6-byte UTF-8 `SENTINEL_PREFIX` (`"⟦cp:"`) inside `bytes`.
+#[inline]
+fn find_sentinel_bytes(bytes: &[u8]) -> Option<usize> {
+    const NEEDLE: &[u8] = SENTINEL_PREFIX.as_bytes();
+    let len = bytes.len();
+    let mut pos = 0usize;
+    while pos + NEEDLE.len() <= len {
+        let rel = find_any3_byte(&bytes[pos..], 0xE2, 0xE2, 0xE2);
+        pos += rel;
+        if pos + NEEDLE.len() > len {
+            return None;
+        }
+        if &bytes[pos..pos + NEEDLE.len()] == NEEDLE {
+            return Some(pos);
+        }
+        pos += 1;
+    }
+    None
+}
 
 #[derive(Debug, Clone, Copy)]
 struct SwarmEntry {
@@ -261,12 +321,31 @@ impl PrefixCompiler {
     }
 
     /// Compiles and canonicalizes a raw LLM API JSON payload for `tenant_id`.
+    #[inline]
     pub fn compile_request(
         &self,
         tenant_id: &str,
         raw_json: &[u8],
         provider_hint: Option<ProviderFormat>,
     ) -> Result<CompileResult, String> {
+        self.compile_request_with_ast(tenant_id, raw_json, provider_hint, true)
+            .map(|(res, _)| res)
+    }
+
+    /// Compiles and canonicalizes a raw LLM API JSON payload for `tenant_id`,
+    /// returning both the [`CompileResult`] and the canonicalized [`JsonValue`] AST.
+    ///
+    /// When `emit_canonical_json` is `false`, `CompileResult::canonical_json` is
+    /// left empty so callers can inject breakpoints directly onto the returned
+    /// `JsonValue` via [`apply_breakpoints_to_value`] and serialize once with
+    /// zero re-parsing.
+    pub fn compile_request_with_ast(
+        &self,
+        tenant_id: &str,
+        raw_json: &[u8],
+        provider_hint: Option<ProviderFormat>,
+        emit_canonical_json: bool,
+    ) -> Result<(CompileResult, JsonValue), String> {
         let start = Instant::now();
         let mut root = parse_json(raw_json)?;
         if root.as_object().is_none() {
@@ -291,13 +370,18 @@ impl PrefixCompiler {
         let config_warnings = detect_config_warnings(&root, provider);
 
         if self.config.mode == CanonicalMode::ObserveOnly {
-            let blocks = extract_blocks(&root, provider, &tenant_key, None);
+            let (blocks, _) = extract_blocks(&root, provider, &tenant_key, None, false, None);
             let (shared_prefix_hash, full_prefix_hash, total_est_tokens) =
                 summarize_blocks(&blocks, raw_json);
-            return Ok(CompileResult {
+            let canonical_json = if emit_canonical_json {
+                raw_json.to_vec()
+            } else {
+                Vec::new()
+            };
+            let res = CompileResult {
                 provider,
                 model,
-                canonical_json: raw_json.to_vec(),
+                canonical_json,
                 blocks,
                 bindings: Vec::new(),
                 tools_reordered: false,
@@ -310,18 +394,18 @@ impl PrefixCompiler {
                 config_fingerprint,
                 config_warnings,
                 compile_ns: elapsed_ns(start),
-            });
+            };
+            return Ok((res, root));
         }
 
         // Pass 1: JSON key canonicalization + deterministic tool sorting.
         let json_keys_reordered = root.canonicalize_in_place();
         let tools_reordered = canonicalize_tools(&mut root);
 
-        // Pass 2 (Stage A): Lossless volatile hoisting with temporary IDs so
+        // Pass 2 (Stage A): Lossless volatile hoisting with sequential temporary IDs so
         // Pass 3 can match semantically identical blocks even if their volatile
         // tokens appeared in different initial orders across swarm agents.
-        let mut temp_bindings: HashMap<usize, (&'static str, String)> = HashMap::new();
-        let mut next_temp_id: usize = 1;
+        let mut temp_bindings: Vec<(&'static str, String)> = Vec::new();
         if matches!(
             self.config.mode,
             CanonicalMode::HoistVolatile | CanonicalMode::SwarmAlign
@@ -330,30 +414,32 @@ impl PrefixCompiler {
                 &mut root,
                 provider,
                 self.config.max_volatile_per_block,
-                &mut next_temp_id,
                 &mut temp_bindings,
             );
         }
 
         // Pass 3: All-Gather shared-block alignment across multi-agent swarms.
-        let all_gather_reordered = if self.config.mode == CanonicalMode::SwarmAlign {
-            all_gather_align_pass(
-                &mut root,
-                provider,
-                &tenant_key,
-                tenant_hash,
-                &self.swarm_stats,
-                self.config.all_gather_delimiter.as_deref(),
-            )
-        } else {
-            false
-        };
+        let (all_gather_reordered, cached_system_blocks) =
+            if self.config.mode == CanonicalMode::SwarmAlign {
+                all_gather_align_pass(
+                    &mut root,
+                    provider,
+                    &tenant_key,
+                    tenant_hash,
+                    &self.swarm_stats,
+                    self.config.all_gather_delimiter.as_deref(),
+                    !temp_bindings.is_empty(),
+                )
+            } else {
+                (false, None)
+            };
 
         // Pass 2 (Stage B): Renumber temporary anchors into canonical final
         // `⟦cp:v1⟧`, `⟦cp:v2⟧`, ... in post-alignment prefix order, then append
         // the compact trailing binding block strictly at the end of the request.
         let mut bindings = Vec::new();
         if !temp_bindings.is_empty() {
+            bindings.reserve(temp_bindings.len());
             finalize_hoisted_anchors(&mut root, provider, &temp_bindings, &mut bindings);
         }
         let volatile_spans_hoisted = bindings.len();
@@ -365,14 +451,40 @@ impl PrefixCompiler {
             None
         };
 
-        let mut canonical_json = Vec::with_capacity(raw_json.len() + 64);
-        let _ = serialize_canonical(&root, &mut canonical_json);
+        let (blocks, block_ranges) = extract_blocks(
+            &root,
+            provider,
+            &tenant_key,
+            volatile_tail_loc,
+            true,
+            cached_system_blocks,
+        );
 
-        let blocks = extract_blocks(&root, provider, &tenant_key, volatile_tail_loc);
+        // `root` is strictly sorted after Pass 1 + `set_field_sorted` mutations.
+        // Emit canonical JSON by copying already-serialized block bytes for `tools`,
+        // `system`, and `instructions` instead of re-serializing them from scratch.
+        let canonical_json = if emit_canonical_json {
+            let est = blocks
+                .iter()
+                .map(|b| b.canonical_bytes.len() + 2)
+                .sum::<usize>()
+                + 512;
+            let mut out = Vec::with_capacity(est);
+            serialize_root_with_block_cache(&root, &blocks, block_ranges, &mut out);
+            out
+        } else {
+            Vec::new()
+        };
+
+        let fallback_slice = if emit_canonical_json {
+            canonical_json.as_slice()
+        } else {
+            raw_json
+        };
         let (shared_prefix_hash, full_prefix_hash, total_est_tokens) =
-            summarize_blocks(&blocks, &canonical_json);
+            summarize_blocks(&blocks, fallback_slice);
 
-        Ok(CompileResult {
+        let res = CompileResult {
             provider,
             model,
             canonical_json,
@@ -388,7 +500,8 @@ impl PrefixCompiler {
             config_fingerprint,
             config_warnings,
             compile_ns: elapsed_ns(start),
-        })
+        };
+        Ok((res, root))
     }
 }
 
@@ -600,12 +713,12 @@ pub fn reconstruct_lossless(canonical_text: &str, bindings: &[HoistedBinding]) -
 }
 
 fn escape_sentinels_into(segment: &str, out: &mut String) {
-    if !segment.contains(SENTINEL_PREFIX) {
+    if find_sentinel_bytes(segment.as_bytes()).is_none() {
         out.push_str(segment);
         return;
     }
     let mut rest = segment;
-    while let Some(pos) = rest.find(SENTINEL_PREFIX) {
+    while let Some(pos) = find_sentinel_bytes(rest.as_bytes()) {
         out.push_str(&rest[..pos]);
         out.push_str(SENTINEL_ESCAPED);
         rest = &rest[pos + SENTINEL_PREFIX.len()..];
@@ -616,34 +729,51 @@ fn escape_sentinels_into(segment: &str, out: &mut String) {
 fn hoist_text_stage_a(
     text: &mut String,
     max_spans: usize,
-    next_temp_id: &mut usize,
-    temp_bindings: &mut HashMap<usize, (&'static str, String)>,
+    temp_bindings: &mut Vec<(&'static str, String)>,
 ) {
-    let spans = find_volatile_spans(text, max_spans);
-    let has_sentinel = text.contains(SENTINEL_PREFIX);
+    // Every volatile pattern AND `SENTINEL_PREFIX` ("⟦cp:") contains '-', '_', or ':'.
+    // If none exist, return immediately in O(len/32) with zero allocations.
+    let first_hit = find_any3_byte(text.as_bytes(), b'-', b'_', b':');
+    if first_hit == text.len() {
+        return;
+    }
+
+    let (spans, has_sentinel) = find_volatile_spans_and_sentinel_from(text, max_spans, first_hit);
     if spans.is_empty() && !has_sentinel {
         return;
     }
 
+    let need_escape = has_sentinel || spans.len() >= max_spans;
     let mut out = String::with_capacity(text.len() + spans.len() * 8 + 16);
     let mut cursor = 0usize;
 
     for (start, end, kind) in spans {
-        if start < cursor || end > text.len() || !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+        if start < cursor
+            || end > text.len()
+            || !text.is_char_boundary(start)
+            || !text.is_char_boundary(end)
+        {
             continue;
         }
-        escape_sentinels_into(&text[cursor..start], &mut out);
-        let tid = *next_temp_id;
-        *next_temp_id += 1;
-        temp_bindings.insert(tid, (kind, text[start..end].to_string()));
+        if need_escape {
+            escape_sentinels_into(&text[cursor..start], &mut out);
+        } else {
+            out.push_str(&text[cursor..start]);
+        }
+        temp_bindings.push((kind, text[start..end].to_string()));
+        let tid = temp_bindings.len();
         out.push_str(SENTINEL_PREFIX);
         out.push('t');
-        out.push_str(&tid.to_string());
+        push_usize(&mut out, tid);
         out.push_str(SENTINEL_SUFFIX);
         cursor = end;
     }
 
-    escape_sentinels_into(&text[cursor..], &mut out);
+    if need_escape {
+        escape_sentinels_into(&text[cursor..], &mut out);
+    } else {
+        out.push_str(&text[cursor..]);
+    }
     *text = out;
 }
 
@@ -651,20 +781,19 @@ fn hoist_volatile_pass(
     root: &mut JsonValue,
     provider: ProviderFormat,
     max_per_block: usize,
-    next_temp_id: &mut usize,
-    temp_bindings: &mut HashMap<usize, (&'static str, String)>,
+    temp_bindings: &mut Vec<(&'static str, String)>,
 ) {
     // 1. Anthropic `system`
     if let Some(sys) = root.get_mut("system") {
         match sys {
             JsonValue::String(s) => {
-                hoist_text_stage_a(s, max_per_block, next_temp_id, temp_bindings);
+                hoist_text_stage_a(s, max_per_block, temp_bindings);
             }
             JsonValue::Array(items) => {
                 for item in items.iter_mut() {
                     if item.get("type").and_then(JsonValue::as_str) == Some("text") {
                         if let Some(JsonValue::String(s)) = item.get_mut("text") {
-                            hoist_text_stage_a(s, max_per_block, next_temp_id, temp_bindings);
+                            hoist_text_stage_a(s, max_per_block, temp_bindings);
                         }
                     }
                 }
@@ -675,7 +804,7 @@ fn hoist_volatile_pass(
 
     // 2. OpenAI Responses `instructions`
     if let Some(JsonValue::String(s)) = root.get_mut("instructions") {
-        hoist_text_stage_a(s, max_per_block, next_temp_id, temp_bindings);
+        hoist_text_stage_a(s, max_per_block, temp_bindings);
     }
 
     // 3. Early `messages` (excluding the final user turn)
@@ -685,7 +814,7 @@ fn hoist_volatile_pass(
             if let Some(content) = msg.get_mut("content") {
                 match content {
                     JsonValue::String(s) => {
-                        hoist_text_stage_a(s, max_per_block, next_temp_id, temp_bindings);
+                        hoist_text_stage_a(s, max_per_block, temp_bindings);
                     }
                     JsonValue::Array(parts) => {
                         for part in parts.iter_mut() {
@@ -695,12 +824,7 @@ fn hoist_volatile_pass(
                             );
                             if is_text {
                                 if let Some(JsonValue::String(s)) = part.get_mut("text") {
-                                    hoist_text_stage_a(
-                                        s,
-                                        max_per_block,
-                                        next_temp_id,
-                                        temp_bindings,
-                                    );
+                                    hoist_text_stage_a(s, max_per_block, temp_bindings);
                                 }
                             }
                         }
@@ -719,7 +843,7 @@ fn hoist_volatile_pass(
                 if let Some(content) = item.get_mut("content") {
                     match content {
                         JsonValue::String(s) => {
-                            hoist_text_stage_a(s, max_per_block, next_temp_id, temp_bindings);
+                            hoist_text_stage_a(s, max_per_block, temp_bindings);
                         }
                         JsonValue::Array(parts) => {
                             for part in parts.iter_mut() {
@@ -729,12 +853,7 @@ fn hoist_volatile_pass(
                                 );
                                 if is_text {
                                     if let Some(JsonValue::String(s)) = part.get_mut("text") {
-                                        hoist_text_stage_a(
-                                            s,
-                                            max_per_block,
-                                            next_temp_id,
-                                            temp_bindings,
-                                        );
+                                        hoist_text_stage_a(s, max_per_block, temp_bindings);
                                     }
                                 }
                             }
@@ -756,28 +875,135 @@ fn prefix_message_scan_limit(msgs: &[JsonValue]) -> usize {
     msgs.len()
 }
 
+#[inline]
+fn format_usize_buf(mut n: usize, buf: &mut [u8; 20]) -> &[u8] {
+    let mut idx = buf.len();
+    loop {
+        idx -= 1;
+        buf[idx] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    &buf[idx..]
+}
+
+#[inline]
+fn parse_ascii_usize(digits: &[u8]) -> Option<usize> {
+    let mut val = 0usize;
+    for &b in digits {
+        val = val.checked_mul(10)?.checked_add((b - b'0') as usize)?;
+    }
+    Some(val)
+}
+
 fn renumber_text_anchors(
     text: &mut String,
     source_path: &str,
-    temp_bindings: &HashMap<usize, (&'static str, String)>,
+    temp_bindings: &[(&'static str, String)],
     next_final_id: &mut usize,
     out_bindings: &mut Vec<HoistedBinding>,
 ) {
-    if !text.contains(SENTINEL_PREFIX) {
-        return;
+    let first_pos = match find_sentinel_bytes(text.as_bytes()) {
+        Some(p) => p,
+        None => return,
+    };
+
+    const SENT_PRE: &[u8] = SENTINEL_PREFIX.as_bytes();
+    const SENT_ESC: &[u8] = SENTINEL_ESCAPED.as_bytes();
+    const SENT_SUF: &[u8] = SENTINEL_SUFFIX.as_bytes();
+
+    // Fast path: patch `⟦cp:t<tid>⟧` -> `⟦cp:v<fid>⟧` in place whenever digit counts match
+    // (zero String allocation and zero memcpy for multi-KB prompts!).
+    let mut fallback_pos: Option<usize> = None;
+    {
+        // SAFETY: Every write below strictly replaces ASCII bytes ('t' and ASCII digits)
+        // with ASCII bytes ('v' and ASCII digits) of identical byte length, preserving UTF-8.
+        let bytes = unsafe { text.as_bytes_mut() };
+        let mut pos = first_pos;
+
+        while pos < bytes.len() {
+            let after = &bytes[pos..];
+            if after.starts_with(SENT_ESC) {
+                pos += SENT_ESC.len();
+            } else if after.len() > SENT_PRE.len() && after[SENT_PRE.len()] == b't' {
+                let d_start = pos + SENT_PRE.len() + 1;
+                let mut d_end = d_start;
+                while d_end < bytes.len() && bytes[d_end].is_ascii_digit() {
+                    d_end += 1;
+                }
+                let digit_len = d_end - d_start;
+                if digit_len > 0 && bytes[d_end..].starts_with(SENT_SUF) {
+                    if let Some(tid) = parse_ascii_usize(&bytes[d_start..d_end]) {
+                        if tid > 0 {
+                            if let Some(&(kind, ref orig)) = temp_bindings.get(tid - 1) {
+                                let fid = *next_final_id;
+                                let mut num_buf = [0u8; 20];
+                                let fid_bytes = format_usize_buf(fid, &mut num_buf);
+                                if fid_bytes.len() == digit_len {
+                                    *next_final_id += 1;
+                                    bytes[pos + SENT_PRE.len()] = b'v';
+                                    bytes[d_start..d_end].copy_from_slice(fid_bytes);
+                                    let full_end = d_end + SENT_SUF.len();
+                                    // SAFETY: `bytes[pos..full_end]` is valid UTF-8 ("⟦cp:v<digits>⟧").
+                                    let anchor = unsafe {
+                                        std::str::from_utf8_unchecked(&bytes[pos..full_end])
+                                    }
+                                    .to_owned();
+                                    out_bindings.push(HoistedBinding {
+                                        anchor,
+                                        original_value: orig.clone(),
+                                        kind,
+                                        source_path: source_path.to_string(),
+                                    });
+                                    pos = full_end;
+                                } else {
+                                    fallback_pos = Some(pos);
+                                    break;
+                                }
+                            } else {
+                                pos += SENT_PRE.len();
+                            }
+                        } else {
+                            pos += SENT_PRE.len();
+                        }
+                    } else {
+                        pos += SENT_PRE.len();
+                    }
+                } else {
+                    pos += SENT_PRE.len();
+                }
+            } else {
+                pos += SENT_PRE.len();
+            }
+
+            match find_sentinel_bytes(&bytes[pos..]) {
+                Some(rel) => pos += rel,
+                None => break,
+            }
+        }
     }
 
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text.as_str();
+    let start_fallback = match fallback_pos {
+        Some(p) => p,
+        None => return,
+    };
 
-    while let Some(pos) = rest.find(SENTINEL_PREFIX) {
+    // Rare fallback when `tid` and `fid` have different decimal digit counts (e.g. t10 -> v1).
+    let mut out = String::with_capacity(text.len() + 16);
+    out.push_str(&text[..start_fallback]);
+    let mut rest = &text[start_fallback..];
+    let mut next_pos = Some(0usize);
+
+    while let Some(pos) = next_pos {
         out.push_str(&rest[..pos]);
         let after = &rest[pos..];
 
-        // Preserve escaped literal sentinels verbatim.
         if after.starts_with(SENTINEL_ESCAPED) {
             out.push_str(SENTINEL_ESCAPED);
             rest = &after[SENTINEL_ESCAPED.len()..];
+            next_pos = find_sentinel_bytes(rest.as_bytes());
             continue;
         }
 
@@ -788,25 +1014,33 @@ fn renumber_text_anchors(
                     .take_while(|b| b.is_ascii_digit())
                     .count();
                 if digit_len > 0 && after_t[digit_len..].starts_with(SENTINEL_SUFFIX) {
-                    if let Ok(tid) = after_t[..digit_len].parse::<usize>() {
-                        if let Some((kind, orig)) = temp_bindings.get(&tid) {
-                            let fid = *next_final_id;
-                            *next_final_id += 1;
-                            let anchor =
-                                format!("{SENTINEL_PREFIX}v{fid}{SENTINEL_SUFFIX}");
-                            out.push_str(&anchor);
-                            out_bindings.push(HoistedBinding {
-                                anchor,
-                                original_value: orig.clone(),
-                                kind,
-                                source_path: source_path.to_string(),
-                            });
-                            let full_len = SENTINEL_PREFIX.len()
-                                + 1
-                                + digit_len
-                                + SENTINEL_SUFFIX.len();
-                            rest = &after[full_len..];
-                            continue;
+                    if let Some(tid) = parse_ascii_usize(&after_t.as_bytes()[..digit_len]) {
+                        if tid > 0 {
+                            if let Some(&(kind, ref orig)) = temp_bindings.get(tid - 1) {
+                                let fid = *next_final_id;
+                                *next_final_id += 1;
+                                let mut anchor = String::with_capacity(
+                                    SENTINEL_PREFIX.len() + 1 + 6 + SENTINEL_SUFFIX.len(),
+                                );
+                                anchor.push_str(SENTINEL_PREFIX);
+                                anchor.push('v');
+                                push_usize(&mut anchor, fid);
+                                anchor.push_str(SENTINEL_SUFFIX);
+                                out.push_str(&anchor);
+                                out_bindings.push(HoistedBinding {
+                                    anchor,
+                                    original_value: orig.clone(),
+                                    kind,
+                                    source_path: source_path.to_string(),
+                                });
+                                let full_len = SENTINEL_PREFIX.len()
+                                    + 1
+                                    + digit_len
+                                    + SENTINEL_SUFFIX.len();
+                                rest = &after[full_len..];
+                                next_pos = find_sentinel_bytes(rest.as_bytes());
+                                continue;
+                            }
                         }
                     }
                 }
@@ -815,6 +1049,7 @@ fn renumber_text_anchors(
 
         out.push_str(SENTINEL_PREFIX);
         rest = &after[SENTINEL_PREFIX.len()..];
+        next_pos = find_sentinel_bytes(rest.as_bytes());
     }
 
     out.push_str(rest);
@@ -824,7 +1059,7 @@ fn renumber_text_anchors(
 fn finalize_hoisted_anchors(
     root: &mut JsonValue,
     provider: ProviderFormat,
-    temp_bindings: &HashMap<usize, (&'static str, String)>,
+    temp_bindings: &[(&'static str, String)],
     out_bindings: &mut Vec<HoistedBinding>,
 ) {
     let mut next_final_id = 1usize;
@@ -844,14 +1079,16 @@ fn finalize_hoisted_anchors(
                 for (i, item) in items.iter_mut().enumerate() {
                     if item.get("type").and_then(JsonValue::as_str) == Some("text") {
                         if let Some(JsonValue::String(s)) = item.get_mut("text") {
-                            let path = format!("system[{i}]");
-                            renumber_text_anchors(
-                                s,
-                                &path,
-                                temp_bindings,
-                                &mut next_final_id,
-                                out_bindings,
-                            );
+                            if find_sentinel_bytes(s.as_bytes()).is_some() {
+                                let path = fmt_indexed("system[", i, "]");
+                                renumber_text_anchors(
+                                    s,
+                                    &path,
+                                    temp_bindings,
+                                    &mut next_final_id,
+                                    out_bindings,
+                                );
+                            }
                         }
                     }
                 }
@@ -876,26 +1113,30 @@ fn finalize_hoisted_anchors(
             if let Some(content) = msg.get_mut("content") {
                 match content {
                     JsonValue::String(s) => {
-                        let path = format!("messages[{i}]");
-                        renumber_text_anchors(
-                            s,
-                            &path,
-                            temp_bindings,
-                            &mut next_final_id,
-                            out_bindings,
-                        );
+                        if find_sentinel_bytes(s.as_bytes()).is_some() {
+                            let path = fmt_indexed("messages[", i, "]");
+                            renumber_text_anchors(
+                                s,
+                                &path,
+                                temp_bindings,
+                                &mut next_final_id,
+                                out_bindings,
+                            );
+                        }
                     }
                     JsonValue::Array(parts) => {
                         for (j, part) in parts.iter_mut().enumerate() {
                             if let Some(JsonValue::String(s)) = part.get_mut("text") {
-                                let path = format!("messages[{i}].content[{j}]");
-                                renumber_text_anchors(
-                                    s,
-                                    &path,
-                                    temp_bindings,
-                                    &mut next_final_id,
-                                    out_bindings,
-                                );
+                                if find_sentinel_bytes(s.as_bytes()).is_some() {
+                                    let path = fmt_msg_part("messages[", i, "].content[", j);
+                                    renumber_text_anchors(
+                                        s,
+                                        &path,
+                                        temp_bindings,
+                                        &mut next_final_id,
+                                        out_bindings,
+                                    );
+                                }
                             }
                         }
                     }
@@ -912,26 +1153,30 @@ fn finalize_hoisted_anchors(
                 if let Some(content) = item.get_mut("content") {
                     match content {
                         JsonValue::String(s) => {
-                            let path = format!("input[{i}]");
-                            renumber_text_anchors(
-                                s,
-                                &path,
-                                temp_bindings,
-                                &mut next_final_id,
-                                out_bindings,
-                            );
+                            if find_sentinel_bytes(s.as_bytes()).is_some() {
+                                let path = fmt_indexed("input[", i, "]");
+                                renumber_text_anchors(
+                                    s,
+                                    &path,
+                                    temp_bindings,
+                                    &mut next_final_id,
+                                    out_bindings,
+                                );
+                            }
                         }
                         JsonValue::Array(parts) => {
                             for (j, part) in parts.iter_mut().enumerate() {
                                 if let Some(JsonValue::String(s)) = part.get_mut("text") {
-                                    let path = format!("input[{i}].content[{j}]");
-                                    renumber_text_anchors(
-                                        s,
-                                        &path,
-                                        temp_bindings,
-                                        &mut next_final_id,
-                                        out_bindings,
-                                    );
+                                    if find_sentinel_bytes(s.as_bytes()).is_some() {
+                                        let path = fmt_msg_part("input[", i, "].content[", j);
+                                        renumber_text_anchors(
+                                            s,
+                                            &path,
+                                            temp_bindings,
+                                            &mut next_final_id,
+                                            out_bindings,
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -944,7 +1189,13 @@ fn finalize_hoisted_anchors(
 }
 
 fn format_binding_summary(bindings: &[HoistedBinding]) -> String {
-    let mut out = String::from("[cachepin volatile bindings]");
+    let est = 32
+        + bindings
+            .iter()
+            .map(|b| b.anchor.len() + b.original_value.len() + 2)
+            .sum::<usize>();
+    let mut out = String::with_capacity(est);
+    out.push_str("[cachepin volatile bindings]");
     for b in bindings {
         out.push('\n');
         out.push_str(&b.anchor);
@@ -962,7 +1213,7 @@ fn append_volatile_tail(
     match provider {
         ProviderFormat::AnthropicMessages => {
             if root.get("messages").and_then(JsonValue::as_array).is_none() {
-                root.set_field("messages", JsonValue::Array(Vec::new()));
+                root.set_field_sorted("messages", JsonValue::Array(Vec::new()));
             }
             if let Some(msgs) = root.get_mut("messages").and_then(JsonValue::as_array_mut) {
                 let tail_part = JsonValue::Object(vec![
@@ -984,14 +1235,14 @@ fn append_volatile_tail(
                                     ("text".to_string(), JsonValue::String(orig_text)),
                                     ("type".to_string(), JsonValue::String("text".to_string())),
                                 ]);
-                                last.set_field(
+                                last.set_field_sorted(
                                     "content",
                                     JsonValue::Array(vec![first_part, tail_part]),
                                 );
                                 return VolatileTailLoc::MessagePart(msg_idx, 1);
                             }
                             _ => {
-                                last.set_field("content", JsonValue::Array(vec![tail_part]));
+                                last.set_field_sorted("content", JsonValue::Array(vec![tail_part]));
                                 return VolatileTailLoc::MessagePart(msg_idx, 0);
                             }
                         }
@@ -1041,18 +1292,18 @@ fn append_volatile_tail(
                         ),
                         ("role".to_string(), JsonValue::String("user".to_string())),
                     ]);
-                    root.set_field("input", JsonValue::Array(vec![first_item, tail_item]));
+                    root.set_field_sorted("input", JsonValue::Array(vec![first_item, tail_item]));
                     VolatileTailLoc::InputItem(1)
                 }
                 _ => {
-                    root.set_field("input", JsonValue::Array(vec![tail_item]));
+                    root.set_field_sorted("input", JsonValue::Array(vec![tail_item]));
                     VolatileTailLoc::InputItem(0)
                 }
             }
         }
         ProviderFormat::OpenAiChat | ProviderFormat::VllmOpenAi | ProviderFormat::Generic => {
             if root.get("messages").and_then(JsonValue::as_array).is_none() {
-                root.set_field("messages", JsonValue::Array(Vec::new()));
+                root.set_field_sorted("messages", JsonValue::Array(Vec::new()));
             }
             if let Some(msgs) = root.get_mut("messages").and_then(JsonValue::as_array_mut) {
                 let idx = msgs.len();
@@ -1068,140 +1319,285 @@ fn append_volatile_tail(
     }
 }
 
-// --- Pure-Rust Volatile Pattern Detectors ---
+// --- SIMD-Accelerated Volatile Pattern Detectors ---
 
-const MASK_ISO: u8 = 1 << 0;
-const MASK_HEX: u8 = 1 << 1;
-const MASK_PREFIX_ID: u8 = 1 << 2;
-const MASK_HEADER: u8 = 1 << 3;
-
-const fn build_volatile_start_mask() -> [u8; 256] {
-    let mut t = [0u8; 256];
-    // ISO-8601 years 1900..=2199 start with '1' or '2'
-    t[b'1' as usize] |= MASK_ISO;
-    t[b'2' as usize] |= MASK_ISO;
-    // UUID hex digits
-    let mut b = b'0';
-    while b <= b'9' {
-        t[b as usize] |= MASK_HEX;
-        b += 1;
-    }
-    let mut b = b'a';
-    while b <= b'f' {
-        t[b as usize] |= MASK_HEX;
-        b += 1;
-    }
-    let mut b = b'A';
-    while b <= b'F' {
-        t[b as usize] |= MASK_HEX;
-        b += 1;
-    }
-    // Prefixed IDs: agent_run_, session_, trace_, span_, call_, req_, run_
-    t[b'a' as usize] |= MASK_PREFIX_ID;
-    t[b's' as usize] |= MASK_PREFIX_ID;
-    t[b't' as usize] |= MASK_PREFIX_ID;
-    t[b'c' as usize] |= MASK_PREFIX_ID;
-    t[b'r' as usize] |= MASK_PREFIX_ID;
-    // Inline headers: Current ..., Timestamp:, Date:
-    t[b'c' as usize] |= MASK_HEADER;
-    t[b'C' as usize] |= MASK_HEADER;
-    t[b't' as usize] |= MASK_HEADER;
-    t[b'T' as usize] |= MASK_HEADER;
-    t[b'd' as usize] |= MASK_HEADER;
-    t[b'D' as usize] |= MASK_HEADER;
-    t
+struct VolatileVisitor<'a> {
+    text: &'a str,
+    bytes: &'a [u8],
+    start_offset: usize,
+    max_spans: usize,
+    cursor: usize,
+    spans: Vec<(usize, usize, &'static str)>,
+    has_sentinel: bool,
 }
 
-static VOLATILE_START_MASK: [u8; 256] = build_volatile_start_mask();
-
-fn find_volatile_spans(text: &str, max_spans: usize) -> Vec<(usize, usize, &'static str)> {
-    if max_spans == 0 || text.is_empty() {
-        return Vec::new();
+impl VolatileVisitor<'_> {
+    #[cold]
+    #[inline(never)]
+    fn try_iso(&mut self, start: usize, rel: usize) -> usize {
+        if let Some(end) = match_iso_timestamp(self.bytes, start) {
+            self.spans.push((start, end, "timestamp"));
+            self.cursor = end;
+            return if self.spans.len() >= self.max_spans {
+                usize::MAX
+            } else {
+                end - self.start_offset
+            };
+        }
+        rel + 1
     }
+
+    #[cold]
+    #[inline(never)]
+    fn try_uuid(&mut self, start: usize, rel: usize) -> usize {
+        if let Some(end) = match_uuid(self.bytes, start) {
+            self.spans.push((start, end, "uuid"));
+            self.cursor = end;
+            return if self.spans.len() >= self.max_spans {
+                usize::MAX
+            } else {
+                end - self.start_offset
+            };
+        }
+        rel + 1
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn try_prefixed_id(&mut self, start: usize, rel: usize) -> usize {
+        if let Some(end) = match_prefixed_id(self.bytes, start) {
+            self.spans.push((start, end, "opaque_id"));
+            self.cursor = end;
+            return if self.spans.len() >= self.max_spans {
+                usize::MAX
+            } else {
+                end - self.start_offset
+            };
+        }
+        rel + 1
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn try_colon_e(&mut self, hit: usize, rel: usize) -> usize {
+        let bytes = self.bytes;
+        let mut matched = None;
+        if hit >= self.cursor + 16 && (bytes[hit - 16] | 0x20) == b'c' {
+            matched = match_inline_header(self.text, bytes, hit - 16);
+        }
+        if matched.is_none() && hit >= self.cursor + 12 && (bytes[hit - 12] | 0x20) == b'c' {
+            matched = match_inline_header(self.text, bytes, hit - 12);
+        }
+        if matched.is_none() && hit >= self.cursor + 4 && (bytes[hit - 4] | 0x20) == b'd' {
+            matched = match_inline_header(self.text, bytes, hit - 4);
+        }
+        if let Some((val_start, val_end, kind)) = matched {
+            self.spans.push((val_start, val_end, kind));
+            self.cursor = val_end;
+            return if self.spans.len() >= self.max_spans {
+                usize::MAX
+            } else {
+                val_end - self.start_offset
+            };
+        }
+        rel + 1
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn try_colon_p(&mut self, hit: usize, rel: usize) -> usize {
+        if let Some((val_start, val_end, kind)) =
+            match_inline_header(self.text, self.bytes, hit - 9)
+        {
+            self.spans.push((val_start, val_end, kind));
+            self.cursor = val_end;
+            return if self.spans.len() >= self.max_spans {
+                usize::MAX
+            } else {
+                val_end - self.start_offset
+            };
+        }
+        rel + 1
+    }
+}
+
+impl Any3Visitor for VolatileVisitor<'_> {
+    #[inline(always)]
+    fn on_hit(&mut self, rel: usize) -> usize {
+        let bytes = self.bytes;
+        let len = bytes.len();
+        let hit = self.start_offset + rel;
+        let b = bytes[hit];
+
+        if b == b'-' {
+            // ISO-8601 (`YYYY-MM-DD[T ]HH:MM:SS...`) has '-' at start + 4 and '-' at hit + 3.
+            // UUID (`8-4-4-4-12`) has '-' at start + 8 and hex at hit + 3 (mutually exclusive).
+            if hit >= self.cursor + 4
+                && hit + 15 <= len
+                && (bytes[hit - 4] == b'1' || bytes[hit - 4] == b'2')
+                && bytes[hit + 3] == b'-'
+                && bytes[hit + 9] == b':'
+            {
+                return self.try_iso(hit - 4, rel);
+            }
+            if hit >= self.cursor + 8
+                && hit + 28 <= len
+                && bytes[hit + 5] == b'-'
+                && bytes[hit + 10] == b'-'
+                && bytes[hit + 15] == b'-'
+            {
+                return self.try_uuid(hit - 8, rel);
+            }
+            return rel + 1;
+        }
+
+        if b == b'_' {
+            // Prefixed opaque IDs (`req_`, `run_`, `span_`, `call_`, `trace_`, `session_`, `agent_run_`).
+            if hit > self.cursor {
+                let cand_start = match bytes[hit - 1] {
+                    b'q' if hit >= self.cursor + 3
+                        && hit + 9 <= len
+                        && bytes[hit - 3] == b'r' =>
+                    {
+                        Some(hit - 3)
+                    }
+                    b'l' if hit >= self.cursor + 4
+                        && hit + 9 <= len
+                        && bytes[hit - 4] == b'c' =>
+                    {
+                        Some(hit - 4)
+                    }
+                    b'e' if hit >= self.cursor + 5
+                        && hit + 9 <= len
+                        && bytes[hit - 5] == b't' =>
+                    {
+                        Some(hit - 5)
+                    }
+                    b't' if hit >= self.cursor + 5
+                        && hit + 13 <= len
+                        && bytes[hit - 5] == b'a'
+                        && bytes[hit + 4] == b'_' =>
+                    {
+                        Some(hit - 5)
+                    }
+                    b'n' if hit + 9 <= len => {
+                        if hit >= self.cursor + 7
+                            && bytes[hit - 7] == b's'
+                            && bytes[hit - 2] == b'o'
+                        {
+                            Some(hit - 7)
+                        } else if hit >= self.cursor + 4
+                            && bytes[hit - 4] == b's'
+                            && bytes[hit - 2] == b'a'
+                        {
+                            Some(hit - 4)
+                        } else if hit >= self.cursor + 3
+                            && bytes[hit - 3] == b'r'
+                            && bytes[hit - 2] == b'u'
+                        {
+                            Some(hit - 3)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+                if let Some(start) = cand_start {
+                    return self.try_prefixed_id(start, rel);
+                }
+            }
+            return rel + 1;
+        }
+
+        // b == b':' — detect literal sentinel prefix ("⟦cp:") and inline headers.
+        if hit > 0 {
+            let prev = bytes[hit - 1];
+            let prev_lower = prev | 0x20;
+            if prev_lower == b'e' {
+                if hit > self.cursor
+                    && ((hit >= self.cursor + 16 && (bytes[hit - 16] | 0x20) == b'c')
+                        || (hit >= self.cursor + 12 && (bytes[hit - 12] | 0x20) == b'c')
+                        || (hit >= self.cursor + 4 && (bytes[hit - 4] | 0x20) == b'd'))
+                {
+                    return self.try_colon_e(hit, rel);
+                }
+            } else if prev_lower == b'p' {
+                if !self.has_sentinel
+                    && prev == b'p'
+                    && hit >= 5
+                    && bytes[hit - 2] == b'c'
+                    && bytes[hit - 3] == 0xA6
+                    && bytes[hit - 4] == 0x9F
+                    && bytes[hit - 5] == 0xE2
+                {
+                    self.has_sentinel = true;
+                }
+                if hit >= self.cursor + 9 && (bytes[hit - 9] | 0x20) == b't' {
+                    return self.try_colon_p(hit, rel);
+                }
+            }
+        }
+        rel + 1
+    }
+}
+
+/// Finds volatile spans and simultaneously detects any literal `SENTINEL_PREFIX`
+/// in a single SIMD pass via `scan_any3_byte(..., b'-', b'_', b':')`.
+///
+/// Correctness proof:
+/// - Every volatile pattern contains an anchor delimiter `'-'`, `'_'`, or `':'` at
+///   a fixed offset `<= 16` after its start byte with strictly ASCII, delimiter-free
+///   prefix bytes before that anchor:
+///   - ISO-8601 (`YYYY-MM-DD...`): `'-'` at `start + 4`
+///   - UUID (`8-4-4-4-12`): `'-'` at `start + 8`
+///   - Prefixed IDs (`req_`, `run_`, `span_`, `call_`, `trace_`, `agent_run_`, `session_`):
+///     first `'_'` at `start + {3, 4, 5, 7}`
+///   - Inline headers (`current utc time:`, `current time:`, `current date:`,
+///     `timestamp:`, `date:`): `':'` at `start + {16, 12, 9, 4}`
+/// - `SENTINEL_PREFIX` (`"⟦cp:"`, 6 UTF-8 bytes) ends with `':'`.
+/// - UTF-8 is self-synchronizing (no multi-byte sequence contains ASCII bytes), and
+///   every matched pattern prefix is strictly ASCII, so every matched `start` is
+///   guaranteed to be a valid UTF-8 character boundary.
+fn find_volatile_spans_and_sentinel_from(
+    text: &str,
+    max_spans: usize,
+    start_offset: usize,
+) -> (Vec<(usize, usize, &'static str)>, bool) {
     let bytes = text.as_bytes();
     let len = bytes.len();
-    let mut spans = Vec::new();
-    let mut i = 0usize;
-
-    while i < len && spans.len() < max_spans {
-        let b = bytes[i];
-        if b >= 0x80 {
-            i += utf8_char_len(b);
-            continue;
-        }
-        let mask = VOLATILE_START_MASK[b as usize];
-        if mask == 0 {
-            i += 1;
-            continue;
-        }
-
-        // (d) Inline time/date headers (`Current time:`, `Timestamp:`, `Date:`)
-        if (mask & MASK_HEADER) != 0 && i + 5 < len {
-            let next = bytes[i + 1] | 0x20;
-            if matches!(
-                (b | 0x20, next),
-                (b'c', b'u') | (b't', b'i') | (b'd', b'a')
-            ) {
-                if let Some((val_start, val_end, kind)) = match_inline_header(text, bytes, i) {
-                    spans.push((val_start, val_end, kind));
-                    i = val_end;
-                    continue;
-                }
-            }
-        }
-
-        // (a) ISO-8601 / RFC-3339 timestamp (`YYYY-MM-DD[T ]HH:MM:SS...`)
-        if (mask & MASK_ISO) != 0
-            && i + 19 <= len
-            && bytes[i + 4] == b'-'
-            && bytes[i + 7] == b'-'
-            && bytes[i + 13] == b':'
-        {
-            if let Some(end) = match_iso_timestamp(bytes, i) {
-                spans.push((i, end, "timestamp"));
-                i = end;
-                continue;
-            }
-        }
-
-        // (b) UUID (`8-4-4-4-12` hex): check hyphen skeleton first in O(1)
-        if (mask & MASK_HEX) != 0
-            && i + 36 <= len
-            && bytes[i + 8] == b'-'
-            && bytes[i + 13] == b'-'
-            && bytes[i + 18] == b'-'
-            && bytes[i + 23] == b'-'
-        {
-            if let Some(end) = match_uuid(bytes, i) {
-                spans.push((i, end, "uuid"));
-                i = end;
-                continue;
-            }
-        }
-
-        // (c) Prefixed opaque IDs (`req_`, `run_`, `span_`, `call_`, `trace_`, `session_`, `agent_run_`)
-        if (mask & MASK_PREFIX_ID) != 0 && i + 12 <= len {
-            let maybe_prefix = match b {
-                b'r' => bytes[i + 3] == b'_',
-                b'c' => bytes[i + 4] == b'_',
-                b't' => bytes[i + 5] == b'_',
-                b's' => bytes[i + 4] == b'_' || (i + 7 < len && bytes[i + 7] == b'_'),
-                b'a' => i + 9 < len && bytes[i + 9] == b'_',
-                _ => false,
-            };
-            if maybe_prefix {
-                if let Some(end) = match_prefixed_id(bytes, i) {
-                    spans.push((i, end, "opaque_id"));
-                    i = end;
-                    continue;
-                }
-            }
-        }
-
-        i += 1;
+    if len == 0 || start_offset >= len {
+        return (Vec::new(), false);
+    }
+    if max_spans == 0 {
+        return (Vec::new(), find_sentinel_bytes(&bytes[start_offset..]).is_some());
     }
 
-    spans
+    let mut visitor = VolatileVisitor {
+        text,
+        bytes,
+        start_offset,
+        max_spans,
+        cursor: 0,
+        spans: Vec::new(),
+        has_sentinel: false,
+    };
+
+    scan_any3_byte(&bytes[start_offset..], b'-', b'_', b':', &mut visitor);
+
+    (visitor.spans, visitor.has_sentinel)
+}
+
+#[cfg(test)]
+fn find_volatile_spans_and_sentinel(
+    text: &str,
+    max_spans: usize,
+) -> (Vec<(usize, usize, &'static str)>, bool) {
+    find_volatile_spans_and_sentinel_from(text, max_spans, 0)
+}
+
+#[cfg(test)]
+fn find_volatile_spans(text: &str, max_spans: usize) -> Vec<(usize, usize, &'static str)> {
+    find_volatile_spans_and_sentinel(text, max_spans).0
 }
 
 #[inline]
@@ -1574,64 +1970,54 @@ fn match_inline_header(
 // Pass 3: AllGatherAlign (Collective Multi-Agent Prefix Convergence)
 // ============================================================================
 
-/// Normalizes temporary volatile anchors `⟦cp:t<digits>⟧` to a constant token
-/// `⟦cp:v0⟧` exclusively for All-Gather block-hash equality comparison so that
-/// two agents holding the same shared block in different initial orders compute
-/// the exact same block hash.
-fn normalize_temp_anchors_for_hash(s: &str) -> String {
-    if !s.contains(SENTINEL_PREFIX) {
-        return s.to_string();
-    }
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    while let Some(pos) = rest.find(SENTINEL_PREFIX) {
-        out.push_str(&rest[..pos]);
+type CachedBlock = Option<(Vec<u8>, u64)>;
+
+/// Stream-hashes `bytes` with SipHash-1-3 while normalizing temporary volatile
+/// anchors `⟦cp:t<digits>⟧` to `⟦cp:v0⟧` on the fly with zero heap allocation.
+fn hash_normalized_temp_anchors(tenant_key: &[u8; 16], bytes: &[u8]) -> u64 {
+    const SENT_PRE: &[u8] = SENTINEL_PREFIX.as_bytes();
+    const SENT_ESC: &[u8] = SENTINEL_ESCAPED.as_bytes();
+    const SENT_SUF: &[u8] = SENTINEL_SUFFIX.as_bytes();
+
+    let mut hasher = KeyedHasher::new(tenant_key);
+    let mut rest = bytes;
+
+    while let Some(pos) = find_sentinel_bytes(rest) {
+        hasher.write(&rest[..pos]);
         let after = &rest[pos..];
-        if after.starts_with(SENTINEL_ESCAPED) {
-            out.push_str(SENTINEL_ESCAPED);
-            rest = &after[SENTINEL_ESCAPED.len()..];
+        if after.starts_with(SENT_ESC) {
+            hasher.write(SENT_ESC);
+            rest = &after[SENT_ESC.len()..];
             continue;
         }
-        if let Some(after_prefix) = after.strip_prefix(SENTINEL_PREFIX) {
-            if let Some(after_t) = after_prefix.strip_prefix('t') {
-                let dlen = after_t.bytes().take_while(|b| b.is_ascii_digit()).count();
-                if dlen > 0 && after_t[dlen..].starts_with(SENTINEL_SUFFIX) {
-                    out.push_str("⟦cp:v0⟧");
-                    let full_len =
-                        SENTINEL_PREFIX.len() + 1 + dlen + SENTINEL_SUFFIX.len();
+        if let Some(after_prefix) = after.strip_prefix(SENT_PRE) {
+            if let Some(after_t) = after_prefix.strip_prefix(b"t") {
+                let dlen = after_t.iter().take_while(|b| b.is_ascii_digit()).count();
+                if dlen > 0 && after_t[dlen..].starts_with(SENT_SUF) {
+                    hasher.write("⟦cp:v0⟧".as_bytes());
+                    let full_len = SENT_PRE.len() + 1 + dlen + SENT_SUF.len();
                     rest = &after[full_len..];
                     continue;
                 }
             }
         }
-        out.push_str(SENTINEL_PREFIX);
-        rest = &after[SENTINEL_PREFIX.len()..];
+        hasher.write(SENT_PRE);
+        rest = &after[SENT_PRE.len()..];
     }
-    out.push_str(rest);
-    out
+
+    hasher.write(rest);
+    hasher.finish()
 }
 
 #[inline]
-fn canonical_bytes_without_cache_control(val: &JsonValue) -> Vec<u8> {
-    let mut out = Vec::with_capacity(256);
-    serialize_canonical_skip_top_key(val, "cache_control", &mut out);
-    out
-}
-
-fn hash_for_all_gather_with_buf(
-    val: &JsonValue,
-    tenant_key: &[u8; 16],
-    scratch: &mut Vec<u8>,
-) -> u64 {
-    scratch.clear();
-    serialize_json_skip_top_key(val, "cache_control", scratch);
-    if let Ok(s) = std::str::from_utf8(scratch) {
-        if s.contains(SENTINEL_PREFIX) {
-            let norm = normalize_temp_anchors_for_hash(s);
-            return keyed_hash64(tenant_key, norm.as_bytes());
-        }
+fn canonical_bytes_without_cache_control(val: &JsonValue, already_canonical: bool) -> Vec<u8> {
+    let mut out = Vec::with_capacity(estimate_serialized_len(val) + 16);
+    if already_canonical {
+        serialize_json_skip_top_key(val, "cache_control", &mut out);
+    } else {
+        serialize_canonical_skip_top_key(val, "cache_control", &mut out);
     }
-    keyed_hash64(tenant_key, scratch)
+    out
 }
 
 fn is_system_alignable_block(item: &JsonValue) -> bool {
@@ -1657,20 +2043,20 @@ fn is_shared_context_block(part: &JsonValue) -> bool {
 
     if let Some(txt) = part.get("text").and_then(JsonValue::as_str) {
         let t = txt.trim_start();
-        let lower_prefix_len = t.len().min(20);
-        // Safe char-boundary prefix for ASCII tag inspection.
-        let mut end = lower_prefix_len;
-        while end > 0 && !t.is_char_boundary(end) {
-            end -= 1;
+        let bytes = t.as_bytes();
+        let first = match bytes.first() {
+            Some(&b) => b,
+            None => return false,
+        };
+        if first != b'<' && first != b'-' {
+            return false;
         }
-        let head = t[..end].to_ascii_lowercase();
-        return head.starts_with("<doc")
-            || head.starts_with("<document")
-            || head.starts_with("<file")
-            || head.starts_with("<context")
-            || head.starts_with("<shared_context")
-            || head.starts_with("<peer_output")
-            || head.starts_with("--- file:");
+        return starts_with_ignore_ascii_case(bytes, 0, b"<doc")
+            || starts_with_ignore_ascii_case(bytes, 0, b"<file")
+            || starts_with_ignore_ascii_case(bytes, 0, b"<context")
+            || starts_with_ignore_ascii_case(bytes, 0, b"<shared_context")
+            || starts_with_ignore_ascii_case(bytes, 0, b"<peer_output")
+            || starts_with_ignore_ascii_case(bytes, 0, b"--- file:");
     }
     false
 }
@@ -1680,16 +2066,50 @@ fn align_block_slice(
     tenant_key: &[u8; 16],
     tenant_hash: u64,
     swarm_stats: &SwarmBlockStats,
-) -> bool {
+    has_temp_anchors: bool,
+    capture_cache: bool,
+) -> (bool, Option<Vec<CachedBlock>>) {
     if slice.len() < 2 {
-        return false;
+        return (false, None);
     }
 
     let mut hashes = Vec::with_capacity(slice.len());
-    let mut scratch = Vec::with_capacity(1024);
+    let mut cached: Option<Vec<CachedBlock>> = if capture_cache {
+        Some(Vec::with_capacity(slice.len()))
+    } else {
+        None
+    };
+    let mut scratch = if capture_cache {
+        Vec::new()
+    } else {
+        Vec::with_capacity(1024)
+    };
+
     for item in slice.iter() {
-        hashes.push(hash_for_all_gather_with_buf(item, tenant_key, &mut scratch));
+        if let Some(ref mut cache_vec) = cached {
+            let mut buf = Vec::with_capacity(estimate_serialized_len(item) + 16);
+            serialize_json_skip_top_key(item, "cache_control", &mut buf);
+            if has_temp_anchors && find_sentinel_bytes(&buf).is_some() {
+                let bh = hash_normalized_temp_anchors(tenant_key, &buf);
+                hashes.push(bh);
+                cache_vec.push(None);
+            } else {
+                let bh = keyed_hash64(tenant_key, &buf);
+                hashes.push(bh);
+                cache_vec.push(Some((buf, bh)));
+            }
+        } else {
+            scratch.clear();
+            serialize_json_skip_top_key(item, "cache_control", &mut scratch);
+            let bh = if has_temp_anchors && find_sentinel_bytes(&scratch).is_some() {
+                hash_normalized_temp_anchors(tenant_key, &scratch)
+            } else {
+                keyed_hash64(tenant_key, &scratch)
+            };
+            hashes.push(bh);
+        }
     }
+
     let scores = swarm_stats.record_batch_and_score(tenant_hash, &hashes);
     let mut ranked: Vec<(u32, u64, usize)> = Vec::with_capacity(slice.len());
     for (idx, (&bh, &score)) in hashes.iter().zip(scores.iter()).enumerate() {
@@ -1701,7 +2121,7 @@ fn align_block_slice(
         .windows(2)
         .all(|w| (Reverse(w[0].0), Reverse(w[0].1)) <= (Reverse(w[1].0), Reverse(w[1].1)));
     if already_sorted {
-        return false;
+        return (false, cached);
     }
 
     // Stable sort descending by `(swarm_freq_bucket, canonical_block_hash)`.
@@ -1712,12 +2132,23 @@ fn align_block_slice(
         .map(|v| Some(std::mem::replace(v, JsonValue::Null)))
         .collect();
 
-    for (dst, (_, _, src_idx)) in ranked.into_iter().enumerate() {
-        if let Some(val) = owned[src_idx].take() {
-            slice[dst] = val;
+    if let Some(ref mut old_cache) = cached {
+        let mut new_cache = Vec::with_capacity(old_cache.len());
+        for (dst, (_, _, src_idx)) in ranked.into_iter().enumerate() {
+            if let Some(val) = owned[src_idx].take() {
+                slice[dst] = val;
+            }
+            new_cache.push(old_cache[src_idx].take());
+        }
+        *old_cache = new_cache;
+    } else {
+        for (dst, (_, _, src_idx)) in ranked.into_iter().enumerate() {
+            if let Some(val) = owned[src_idx].take() {
+                slice[dst] = val;
+            }
         }
     }
-    true
+    (true, cached)
 }
 
 fn align_delimited_text(
@@ -1726,6 +2157,7 @@ fn align_delimited_text(
     tenant_key: &[u8; 16],
     tenant_hash: u64,
     swarm_stats: &SwarmBlockStats,
+    has_temp_anchors: bool,
 ) -> bool {
     if delim.is_empty() || !text.contains(delim) {
         return false;
@@ -1741,8 +2173,12 @@ fn align_delimited_text(
 
     let mut ranked: Vec<(u32, u64, usize)> = Vec::with_capacity(sortable.len());
     for (idx, &chunk) in sortable.iter().enumerate() {
-        let norm = normalize_temp_anchors_for_hash(chunk);
-        let bh = keyed_hash64(tenant_key, norm.as_bytes());
+        let cb = chunk.as_bytes();
+        let bh = if has_temp_anchors && find_sentinel_bytes(cb).is_some() {
+            hash_normalized_temp_anchors(tenant_key, cb)
+        } else {
+            keyed_hash64(tenant_key, cb)
+        };
         let score = swarm_stats.record_and_score(tenant_hash, bh);
         let bucket = swarm_freq_bucket(score);
         ranked.push((bucket, bh, idx));
@@ -1794,15 +2230,24 @@ fn all_gather_align_pass(
     tenant_hash: u64,
     swarm_stats: &SwarmBlockStats,
     delimiter: Option<&str>,
-) -> bool {
+    has_temp_anchors: bool,
+) -> (bool, Option<Vec<CachedBlock>>) {
     let mut reordered = false;
+    let mut cached_system_blocks = None;
 
     // 1. Delimiter-chunk alignment inside `system` / `instructions` / early messages.
     if let Some(delim) = delimiter {
         if let Some(sys) = root.get_mut("system") {
             match sys {
                 JsonValue::String(s) => {
-                    if align_delimited_text(s, delim, tenant_key, tenant_hash, swarm_stats) {
+                    if align_delimited_text(
+                        s,
+                        delim,
+                        tenant_key,
+                        tenant_hash,
+                        swarm_stats,
+                        has_temp_anchors,
+                    ) {
                         reordered = true;
                     }
                 }
@@ -1816,6 +2261,7 @@ fn all_gather_align_pass(
                                     tenant_key,
                                     tenant_hash,
                                     swarm_stats,
+                                    has_temp_anchors,
                                 ) {
                                     reordered = true;
                                 }
@@ -1827,7 +2273,14 @@ fn all_gather_align_pass(
             }
         }
         if let Some(JsonValue::String(s)) = root.get_mut("instructions") {
-            if align_delimited_text(s, delim, tenant_key, tenant_hash, swarm_stats) {
+            if align_delimited_text(
+                s,
+                delim,
+                tenant_key,
+                tenant_hash,
+                swarm_stats,
+                has_temp_anchors,
+            ) {
                 reordered = true;
             }
         }
@@ -1839,8 +2292,14 @@ fn all_gather_align_pass(
                 if let Some(content) = msg.get_mut("content") {
                     match content {
                         JsonValue::String(s) => {
-                            if align_delimited_text(s, delim, tenant_key, tenant_hash, swarm_stats)
-                            {
+                            if align_delimited_text(
+                                s,
+                                delim,
+                                tenant_key,
+                                tenant_hash,
+                                swarm_stats,
+                                has_temp_anchors,
+                            ) {
                                 reordered = true;
                             }
                         }
@@ -1857,6 +2316,7 @@ fn all_gather_align_pass(
                                             tenant_key,
                                             tenant_hash,
                                             swarm_stats,
+                                            has_temp_anchors,
                                         ) {
                                             reordered = true;
                                         }
@@ -1874,9 +2334,18 @@ fn all_gather_align_pass(
     // 2. Anthropic multi-block `system` content arrays.
     if let Some(sys_arr) = root.get_mut("system").and_then(JsonValue::as_array_mut) {
         if sys_arr.len() >= 2 && sys_arr.iter().all(is_system_alignable_block) {
-            if align_block_slice(sys_arr, tenant_key, tenant_hash, swarm_stats) {
+            let (sys_reordered, sys_cache) = align_block_slice(
+                sys_arr,
+                tenant_key,
+                tenant_hash,
+                swarm_stats,
+                has_temp_anchors,
+                true,
+            );
+            if sys_reordered {
                 reordered = true;
             }
+            cached_system_blocks = sys_cache;
         }
     }
 
@@ -1914,7 +2383,10 @@ fn all_gather_align_pass(
                                 tenant_key,
                                 tenant_hash,
                                 swarm_stats,
+                                has_temp_anchors,
+                                false,
                             )
+                            .0
                         {
                             reordered = true;
                         }
@@ -1926,7 +2398,7 @@ fn all_gather_align_pass(
         }
     }
 
-    reordered
+    (reordered, cached_system_blocks)
 }
 
 // ============================================================================
@@ -2084,17 +2556,17 @@ fn collect_existing_cache_controls(root: &JsonValue, out: &mut Vec<CacheTtl>) {
 // Block Extraction & Prefix Hashing
 // ============================================================================
 
-fn push_block(
+#[inline]
+fn push_block_precomputed(
     blocks: &mut Vec<PrefixBlock>,
     tenant_key: &[u8; 16],
     running_prefix: &mut u64,
     path: String,
     kind: &str,
-    val: &JsonValue,
+    canonical_bytes: Vec<u8>,
+    block_hash: u64,
     breakpoint_eligible: bool,
 ) {
-    let canonical_bytes = canonical_bytes_without_cache_control(val);
-    let block_hash = keyed_hash64(tenant_key, &canonical_bytes);
     *running_prefix = chain_hash64(tenant_key, *running_prefix, block_hash);
     let est_tokens = estimate_tokens_fast(&canonical_bytes);
     blocks.push(PrefixBlock {
@@ -2108,26 +2580,167 @@ fn push_block(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
+fn push_block(
+    blocks: &mut Vec<PrefixBlock>,
+    tenant_key: &[u8; 16],
+    running_prefix: &mut u64,
+    path: String,
+    kind: &str,
+    val: &JsonValue,
+    breakpoint_eligible: bool,
+    already_canonical: bool,
+) {
+    let canonical_bytes = canonical_bytes_without_cache_control(val, already_canonical);
+    let block_hash = keyed_hash64(tenant_key, &canonical_bytes);
+    push_block_precomputed(
+        blocks,
+        tenant_key,
+        running_prefix,
+        path,
+        kind,
+        canonical_bytes,
+        block_hash,
+        breakpoint_eligible,
+    );
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct BlockRanges {
+    tools_start: Option<usize>,
+    system_start: Option<usize>,
+    instructions_idx: Option<usize>,
+}
+
+/// Serializes an already-canonicalized root JSON object by copying pre-serialized
+/// `canonical_bytes` from extracted `blocks` for `tools`, `system`, and `instructions`
+/// (whenever an item has no top-level `cache_control` key), eliminating duplicate
+/// serialization of 95%+ of the request payload.
+fn serialize_root_with_block_cache(
+    root: &JsonValue,
+    blocks: &[PrefixBlock],
+    mut ranges: BlockRanges,
+    out: &mut Vec<u8>,
+) {
+    let entries = match root {
+        JsonValue::Object(entries) => entries,
+        other => {
+            serialize_json(other, out);
+            return;
+        }
+    };
+
+    out.push(b'{');
+    for (i, (k, v)) in entries.iter().enumerate() {
+        if i > 0 {
+            out.push(b',');
+        }
+        write_escaped_key_colon(k, out);
+        match (k.as_str(), v) {
+            ("tools", JsonValue::Array(tools)) if ranges.tools_start.is_some() => {
+                let start = ranges.tools_start.take().unwrap_or(0);
+                if start + tools.len() <= blocks.len() {
+                    out.push(b'[');
+                    for (ti, tool) in tools.iter().enumerate() {
+                        if ti > 0 {
+                            out.push(b',');
+                        }
+                        if tool.get("cache_control").is_none() {
+                            out.extend_from_slice(&blocks[start + ti].canonical_bytes);
+                        } else {
+                            serialize_json(tool, out);
+                        }
+                    }
+                    out.push(b']');
+                } else {
+                    serialize_json(v, out);
+                }
+            }
+            ("system", JsonValue::Array(items)) if ranges.system_start.is_some() => {
+                let start = ranges.system_start.take().unwrap_or(0);
+                if start + items.len() <= blocks.len() {
+                    out.push(b'[');
+                    for (si, item) in items.iter().enumerate() {
+                        if si > 0 {
+                            out.push(b',');
+                        }
+                        if item.get("cache_control").is_none() {
+                            out.extend_from_slice(&blocks[start + si].canonical_bytes);
+                        } else {
+                            serialize_json(item, out);
+                        }
+                    }
+                    out.push(b']');
+                } else {
+                    serialize_json(v, out);
+                }
+            }
+            ("system", other)
+                if ranges.system_start.is_some()
+                    && *other != JsonValue::Null
+                    && other.get("cache_control").is_none() =>
+            {
+                let idx = ranges.system_start.take().unwrap_or(0);
+                if let Some(b) = blocks.get(idx) {
+                    out.extend_from_slice(&b.canonical_bytes);
+                } else {
+                    serialize_json(other, out);
+                }
+            }
+            ("instructions", other)
+                if ranges.instructions_idx.is_some()
+                    && *other != JsonValue::Null
+                    && other.get("cache_control").is_none() =>
+            {
+                let idx = ranges.instructions_idx.take().unwrap_or(0);
+                if let Some(b) = blocks.get(idx) {
+                    out.extend_from_slice(&b.canonical_bytes);
+                } else {
+                    serialize_json(other, out);
+                }
+            }
+            _ => serialize_json(v, out),
+        }
+    }
+    out.push(b'}');
+}
+
 fn extract_blocks(
     root: &JsonValue,
     provider: ProviderFormat,
     tenant_key: &[u8; 16],
     volatile_tail_loc: Option<VolatileTailLoc>,
-) -> Vec<PrefixBlock> {
-    let mut blocks = Vec::new();
+    already_canonical: bool,
+    mut cached_system_blocks: Option<Vec<CachedBlock>>,
+) -> (Vec<PrefixBlock>, BlockRanges) {
+    let est_cap = root
+        .get("tools")
+        .and_then(JsonValue::as_array)
+        .map_or(0, |a| a.len())
+        + root
+            .get("system")
+            .map_or(0, |s| s.as_array().map_or(1, |a| a.len()))
+        + root
+            .get("messages")
+            .and_then(JsonValue::as_array)
+            .map_or(0, |a| a.len() + 2);
+    let mut blocks = Vec::with_capacity(est_cap.max(4));
+    let mut ranges = BlockRanges::default();
     let mut running_prefix = 0u64;
 
     // 1. `tools`
     if let Some(tools) = root.get("tools").and_then(JsonValue::as_array) {
+        ranges.tools_start = Some(blocks.len());
         for (i, tool) in tools.iter().enumerate() {
             push_block(
                 &mut blocks,
                 tenant_key,
                 &mut running_prefix,
-                format!("tools[{i}]"),
+                fmt_indexed("tools[", i, "]"),
                 "tools",
                 tool,
                 true,
+                already_canonical,
             );
         }
     }
@@ -2137,24 +2750,44 @@ fn extract_blocks(
         match sys {
             JsonValue::Null => {}
             JsonValue::Array(items) => {
+                ranges.system_start = Some(blocks.len());
                 for (i, item) in items.iter().enumerate() {
                     let kind = if is_shared_context_block(item) {
                         "shared_doc"
                     } else {
                         "system"
                     };
-                    push_block(
-                        &mut blocks,
-                        tenant_key,
-                        &mut running_prefix,
-                        format!("system[{i}]"),
-                        kind,
-                        item,
-                        true,
-                    );
+                    let cached = cached_system_blocks
+                        .as_mut()
+                        .and_then(|v| v.get_mut(i))
+                        .and_then(Option::take);
+                    if let Some((canonical_bytes, block_hash)) = cached {
+                        push_block_precomputed(
+                            &mut blocks,
+                            tenant_key,
+                            &mut running_prefix,
+                            fmt_indexed("system[", i, "]"),
+                            kind,
+                            canonical_bytes,
+                            block_hash,
+                            true,
+                        );
+                    } else {
+                        push_block(
+                            &mut blocks,
+                            tenant_key,
+                            &mut running_prefix,
+                            fmt_indexed("system[", i, "]"),
+                            kind,
+                            item,
+                            true,
+                            already_canonical,
+                        );
+                    }
                 }
             }
             other => {
+                ranges.system_start = Some(blocks.len());
                 push_block(
                     &mut blocks,
                     tenant_key,
@@ -2163,6 +2796,7 @@ fn extract_blocks(
                     "system",
                     other,
                     true,
+                    already_canonical,
                 );
             }
         }
@@ -2171,6 +2805,7 @@ fn extract_blocks(
     // 3. `instructions` (OpenAI Responses)
     if let Some(instr) = root.get("instructions") {
         if *instr != JsonValue::Null {
+            ranges.instructions_idx = Some(blocks.len());
             push_block(
                 &mut blocks,
                 tenant_key,
@@ -2179,6 +2814,7 @@ fn extract_blocks(
                 "system",
                 instr,
                 true,
+                already_canonical,
             );
         }
     }
@@ -2221,10 +2857,11 @@ fn extract_blocks(
                             &mut blocks,
                             tenant_key,
                             &mut running_prefix,
-                            format!("messages[{i}].content[{j}]"),
+                            fmt_msg_part("messages[", i, "].content[", j),
                             kind,
                             part,
                             eligible,
+                            already_canonical,
                         );
                     }
                 }
@@ -2241,10 +2878,11 @@ fn extract_blocks(
                     &mut blocks,
                     tenant_key,
                     &mut running_prefix,
-                    format!("messages[{i}]"),
+                    fmt_indexed("messages[", i, "]"),
                     kind,
                     msg,
                     eligible,
+                    already_canonical,
                 );
             }
         }
@@ -2269,10 +2907,11 @@ fn extract_blocks(
                             &mut blocks,
                             tenant_key,
                             &mut running_prefix,
-                            format!("input[{i}]"),
+                            fmt_indexed("input[", i, "]"),
                             kind,
                             item,
                             eligible,
+                            already_canonical,
                         );
                     }
                 }
@@ -2286,13 +2925,14 @@ fn extract_blocks(
                         "message",
                         other,
                         true,
+                        already_canonical,
                     );
                 }
             }
         }
     }
 
-    blocks
+    (blocks, ranges)
 }
 
 fn summarize_blocks(blocks: &[PrefixBlock], fallback_json: &[u8]) -> (u64, u64, u32) {
@@ -2325,6 +2965,57 @@ fn summarize_blocks(blocks: &[PrefixBlock], fallback_json: &[u8]) -> (u64, u64, 
 // Breakpoint Application to Wire JSON
 // ============================================================================
 
+/// Mutates an already-canonicalized `root` [`JsonValue`] in place to apply a
+/// [`BreakpointPlan`] (and optional OpenAI `prompt_cache_key`) while preserving
+/// lexicographical key order via [`JsonValue::set_field_sorted`], then
+/// serializes once into a pre-sized wire-format JSON buffer with zero re-parsing.
+pub fn apply_breakpoints_to_value(
+    root: &mut JsonValue,
+    provider: ProviderFormat,
+    plan: &BreakpointPlan,
+    prompt_cache_key: Option<&str>,
+) -> Vec<u8> {
+    match provider {
+        ProviderFormat::AnthropicMessages => {
+            clear_all_cache_controls(root);
+
+            let mut selected: Vec<&PlannedBreakpoint> = plan.breakpoints.iter().collect();
+            selected.sort_by_key(|bp| bp.block_index);
+            selected.dedup_by_key(|bp| bp.block_index);
+            selected.truncate(4);
+
+            // Enforce Anthropic mixed-TTL invariant: 1h breakpoints must precede 5m.
+            let mut seen_5m = false;
+            for bp in selected {
+                let effective_ttl = match bp.ttl {
+                    CacheTtl::OneHour if seen_5m => CacheTtl::FiveMin,
+                    CacheTtl::OneHour => CacheTtl::OneHour,
+                    CacheTtl::FiveMin => {
+                        seen_5m = true;
+                        CacheTtl::FiveMin
+                    }
+                };
+                let cc = make_anthropic_cache_control(effective_ttl);
+                inject_anthropic_breakpoint(root, &bp.path, cc);
+            }
+        }
+        ProviderFormat::OpenAiChat
+        | ProviderFormat::OpenAiResponses
+        | ProviderFormat::VllmOpenAi
+        | ProviderFormat::Generic => {
+            if let Some(key) = prompt_cache_key {
+                if !key.is_empty() {
+                    root.set_field_sorted("prompt_cache_key", JsonValue::String(key.to_string()));
+                }
+            }
+        }
+    }
+
+    let mut out = Vec::with_capacity(estimate_serialized_len(root) + 32);
+    serialize_json(root, &mut out);
+    out
+}
+
 /// Applies a [`BreakpointPlan`] (and optional OpenAI `prompt_cache_key`) onto
 /// `canonical_json`, returning canonical wire-format JSON ready to forward upstream.
 ///
@@ -2344,46 +3035,13 @@ pub fn apply_breakpoints_to_json(
     if root.as_object().is_none() {
         return Err("canonical_json root must be a JSON object".to_string());
     }
-
-    match provider {
-        ProviderFormat::AnthropicMessages => {
-            clear_all_cache_controls(&mut root);
-
-            let mut selected: Vec<&PlannedBreakpoint> = plan.breakpoints.iter().collect();
-            selected.sort_by_key(|bp| bp.block_index);
-            selected.dedup_by_key(|bp| bp.block_index);
-            selected.truncate(4);
-
-            // Enforce Anthropic mixed-TTL invariant: 1h breakpoints must precede 5m.
-            let mut seen_5m = false;
-            for bp in selected {
-                let effective_ttl = match bp.ttl {
-                    CacheTtl::OneHour if seen_5m => CacheTtl::FiveMin,
-                    CacheTtl::OneHour => CacheTtl::OneHour,
-                    CacheTtl::FiveMin => {
-                        seen_5m = true;
-                        CacheTtl::FiveMin
-                    }
-                };
-                let cc = make_anthropic_cache_control(effective_ttl);
-                inject_anthropic_breakpoint(&mut root, &bp.path, cc);
-            }
-        }
-        ProviderFormat::OpenAiChat
-        | ProviderFormat::OpenAiResponses
-        | ProviderFormat::VllmOpenAi
-        | ProviderFormat::Generic => {
-            if let Some(key) = prompt_cache_key {
-                if !key.is_empty() {
-                    root.set_field("prompt_cache_key", JsonValue::String(key.to_string()));
-                }
-            }
-        }
-    }
-
-    let mut out = Vec::with_capacity(canonical_json.len() + 128);
-    let _ = serialize_canonical(&root, &mut out);
-    Ok(out)
+    let _ = root.canonicalize_in_place();
+    Ok(apply_breakpoints_to_value(
+        &mut root,
+        provider,
+        plan,
+        prompt_cache_key,
+    ))
 }
 
 fn make_anthropic_cache_control(ttl: CacheTtl) -> JsonValue {
@@ -2447,11 +3105,11 @@ fn inject_anthropic_breakpoint(root: &mut JsonValue, path: &str, cc: JsonValue) 
                     ("text".to_string(), JsonValue::String(text)),
                     ("type".to_string(), JsonValue::String("text".to_string())),
                 ]);
-                root.set_field("system", JsonValue::Array(vec![block]));
+                root.set_field_sorted("system", JsonValue::Array(vec![block]));
             }
             Some(JsonValue::Array(arr)) => {
                 if let Some(last) = arr.last_mut() {
-                    last.set_field("cache_control", cc);
+                    last.set_field_sorted("cache_control", cc);
                 }
             }
             _ => {}
@@ -2463,7 +3121,7 @@ fn inject_anthropic_breakpoint(root: &mut JsonValue, path: &str, cc: JsonValue) 
         match root.get_mut("system") {
             Some(JsonValue::Array(arr)) => {
                 if let Some(item) = arr.get_mut(idx) {
-                    item.set_field("cache_control", cc);
+                    item.set_field_sorted("cache_control", cc);
                 }
             }
             Some(JsonValue::String(s)) if idx == 0 => {
@@ -2473,7 +3131,7 @@ fn inject_anthropic_breakpoint(root: &mut JsonValue, path: &str, cc: JsonValue) 
                     ("text".to_string(), JsonValue::String(text)),
                     ("type".to_string(), JsonValue::String("text".to_string())),
                 ]);
-                root.set_field("system", JsonValue::Array(vec![block]));
+                root.set_field_sorted("system", JsonValue::Array(vec![block]));
             }
             _ => {}
         }
@@ -2483,7 +3141,7 @@ fn inject_anthropic_breakpoint(root: &mut JsonValue, path: &str, cc: JsonValue) 
     if let Some(idx) = parse_bracket_index(path, "tools[") {
         if let Some(tools) = root.get_mut("tools").and_then(JsonValue::as_array_mut) {
             if let Some(tool) = tools.get_mut(idx) {
-                tool.set_field("cache_control", cc);
+                tool.set_field_sorted("cache_control", cc);
             }
         }
         return;
@@ -2494,7 +3152,7 @@ fn inject_anthropic_breakpoint(root: &mut JsonValue, path: &str, cc: JsonValue) 
             if let Some(msg) = msgs.get_mut(msg_idx) {
                 if let Some(parts) = msg.get_mut("content").and_then(JsonValue::as_array_mut) {
                     if let Some(part) = parts.get_mut(part_idx) {
-                        part.set_field("cache_control", cc);
+                        part.set_field_sorted("cache_control", cc);
                     }
                 }
             }
@@ -2513,7 +3171,7 @@ fn inject_anthropic_breakpoint(root: &mut JsonValue, path: &str, cc: JsonValue) 
                             ("text".to_string(), JsonValue::String(text)),
                             ("type".to_string(), JsonValue::String("text".to_string())),
                         ]);
-                        msg.set_field("content", JsonValue::Array(vec![block]));
+                        msg.set_field_sorted("content", JsonValue::Array(vec![block]));
                     }
                     Some(JsonValue::Array(parts)) => {
                         if let Some(target) = parts.iter_mut().rev().find(|p| {
@@ -2522,7 +3180,7 @@ fn inject_anthropic_breakpoint(root: &mut JsonValue, path: &str, cc: JsonValue) 
                                 Some("thinking" | "redacted_thinking")
                             )
                         }) {
-                            target.set_field("cache_control", cc);
+                            target.set_field_sorted("cache_control", cc);
                         }
                     }
                     _ => {}
@@ -3080,5 +3738,265 @@ mod tests {
         let sys = inj_val.get("system").and_then(JsonValue::as_array).unwrap();
         let cc_count = sys.iter().filter(|b| b.get("cache_control").is_some()).count();
         assert_eq!(cc_count, 4);
+    }
+
+    fn naive_find_volatile_spans_ref(
+        text: &str,
+        max_spans: usize,
+    ) -> Vec<(usize, usize, &'static str)> {
+        if max_spans == 0 || text.is_empty() {
+            return Vec::new();
+        }
+        let bytes = text.as_bytes();
+        let len = bytes.len();
+        let mut spans = Vec::new();
+        let mut i = 0usize;
+
+        while i < len && spans.len() < max_spans {
+            let b = bytes[i];
+            if b >= 0x80 {
+                i += utf8_char_len(b);
+                continue;
+            }
+            if i + 5 < len {
+                let next = bytes[i + 1] | 0x20;
+                if matches!(
+                    (b | 0x20, next),
+                    (b'c', b'u') | (b't', b'i') | (b'd', b'a')
+                ) {
+                    if let Some((val_start, val_end, kind)) = match_inline_header(text, bytes, i) {
+                        spans.push((val_start, val_end, kind));
+                        i = val_end;
+                        continue;
+                    }
+                }
+            }
+            if (b == b'1' || b == b'2')
+                && i + 19 <= len
+                && bytes[i + 4] == b'-'
+                && bytes[i + 7] == b'-'
+                && bytes[i + 13] == b':'
+            {
+                if let Some(end) = match_iso_timestamp(bytes, i) {
+                    spans.push((i, end, "timestamp"));
+                    i = end;
+                    continue;
+                }
+            }
+            if b.is_ascii_hexdigit()
+                && i + 36 <= len
+                && bytes[i + 8] == b'-'
+                && bytes[i + 13] == b'-'
+                && bytes[i + 18] == b'-'
+                && bytes[i + 23] == b'-'
+            {
+                if let Some(end) = match_uuid(bytes, i) {
+                    spans.push((i, end, "uuid"));
+                    i = end;
+                    continue;
+                }
+            }
+            if i + 12 <= len {
+                let maybe_prefix = match b {
+                    b'r' => bytes[i + 3] == b'_',
+                    b'c' => bytes[i + 4] == b'_',
+                    b't' => bytes[i + 5] == b'_',
+                    b's' => bytes[i + 4] == b'_' || (i + 7 < len && bytes[i + 7] == b'_'),
+                    b'a' => i + 9 < len && bytes[i + 9] == b'_',
+                    _ => false,
+                };
+                if maybe_prefix {
+                    if let Some(end) = match_prefixed_id(bytes, i) {
+                        spans.push((i, end, "opaque_id"));
+                        i = end;
+                        continue;
+                    }
+                }
+            }
+            i += 1;
+        }
+        spans
+    }
+
+    #[test]
+    fn test_simd_find_volatile_spans_equivalence_vs_naive_reference() {
+        let cases = [
+            "",
+            "Plain ASCII text with no delimiters at all and plenty of padding over sixty four bytes long.",
+            "2026-11-22T15:48:57Z",
+            "550e8400-e29b-41d4-a716-446655440000",
+            "req_a1b2c3d4e5f6 run_01J9X8K2M4 span_1234abcd call_77889900aabb trace_99887766aabb session_9f8e7d6c5b4a agent_run_00112233aabb",
+            "Current UTC time: 2026-11-22T15:48:57.123456Z UTC | Current time: Sun, 22 Nov 2026 15:48:57 GMT | Current date: 2026-11-22 | Timestamp: 1732290537 | Date: 2026-11-22",
+            // Boundary & precedence tricks:
+            "xCurrent date: 2026-11-22 xCurrent utc time: 2026-11-22T15:48:57Z foo:Date: 2026/11/22",
+            "Date:2026-11-22Current time: 1732290537;req_112233445566-550e8400-e29b-41d4-a716-446655440000",
+            "foo_agent_run_00112233aabb xagent_run_00112233aabb agent_run_short run_benchmark session_manager",
+            // Multi-byte UTF-8 directly before every volatile pattern type:
+            "🚀2026-11-22T15:48:57Z €550e8400-e29b-41d4-a716-446655440000 中req_a1b2c3d4e5f6 日本語Date: 2026-11-22 ⟦cp:2026-11-22T15:48:57Z",
+            "日本語Current UTC time: 2026-11-22T12:00:00Z — こんにちはagent_run_1234567890ab 😀session_deadbeef1234",
+            // Frequent false-positive delimiters (Rust code + prose):
+            "SHARED_REPO_FILE_00: pub fn invariant_check(x: u64) -> bool { x.rotate_left(13) != 0 } lock-free zero-allocation",
+            // Back-to-back timestamps, UUIDs, headers, sentinels:
+            "2026-11-22T10:00:00Z,2026-11-22T10:00:01Z|550e8400-e29b-41d4-a716-446655440000:550e8400-e29b-41d4-a716-446655440001",
+            "⟦cp:v1⟧ ⟦cp:esc:t1⟧ Current time: no_digits_here\n2026-11-22T15:00:00Z Date: nope 2026-11-22T16:00:00+02:00",
+        ];
+
+        for base in cases {
+            // Test every alignment padding 0..=40 (crossing 16- and 32-byte SIMD boundaries).
+            for pad in 0..=40 {
+                let mut padded = " ".repeat(pad);
+                padded.push_str(base);
+                for cap in [0usize, 1, 2, 5, 64] {
+                    let got = find_volatile_spans(&padded, cap);
+                    let expected = naive_find_volatile_spans_ref(&padded, cap);
+                    assert_eq!(
+                        got, expected,
+                        "SIMD vs naive mismatch (pad={pad}, cap={cap}) on {padded:?}"
+                    );
+                }
+                // Also verify sentinel detection matches `contains(SENTINEL_PREFIX)` when no spans cap early.
+                let (spans, has_sent) = find_volatile_spans_and_sentinel(&padded, 64);
+                if spans.is_empty() {
+                    assert_eq!(
+                        has_sent,
+                        padded.contains(SENTINEL_PREFIX),
+                        "sentinel flag mismatch on {padded:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_compile_request_with_ast_and_apply_breakpoints_to_value_equivalence() {
+        let compiler = PrefixCompiler::default();
+        let anth_raw = crate::bench::make_realistic_agent_request(3, 1, 7777);
+
+        let compiled_std = compiler
+            .compile_request("t-eq", &anth_raw, Some(ProviderFormat::AnthropicMessages))
+            .unwrap();
+        let (compiled_no_emit, mut ast) = compiler
+            .compile_request_with_ast(
+                "t-eq",
+                &anth_raw,
+                Some(ProviderFormat::AnthropicMessages),
+                false,
+            )
+            .unwrap();
+
+        assert!(compiled_no_emit.canonical_json.is_empty());
+        assert_eq!(compiled_no_emit.blocks, compiled_std.blocks);
+        assert_eq!(compiled_no_emit.bindings, compiled_std.bindings);
+        assert_eq!(compiled_no_emit.shared_prefix_hash, compiled_std.shared_prefix_hash);
+        assert_eq!(compiled_no_emit.full_prefix_hash, compiled_std.full_prefix_hash);
+        assert_eq!(compiled_no_emit.total_est_tokens, compiled_std.total_est_tokens);
+
+        let plan = BreakpointPlan {
+            breakpoints: vec![
+                PlannedBreakpoint {
+                    block_index: 0,
+                    path: "tools[11]".to_string(),
+                    cumulative_tokens: 1000,
+                    ttl: CacheTtl::OneHour,
+                },
+                PlannedBreakpoint {
+                    block_index: 1,
+                    path: "system[4]".to_string(),
+                    cumulative_tokens: 3000,
+                    ttl: CacheTtl::FiveMin,
+                },
+                PlannedBreakpoint {
+                    block_index: 2,
+                    path: "messages[0].content[0]".to_string(),
+                    cumulative_tokens: 3500,
+                    ttl: CacheTtl::OneHour,
+                },
+            ],
+            expected_cost_usd: 0.01,
+            uncached_cost_usd: 0.05,
+            naive_single_bp_cost_usd: 0.02,
+            expected_savings_vs_uncached_pct: 80.0,
+            keepalive_recommended: false,
+            keepalive_interval_secs: None,
+        };
+
+        let via_json = apply_breakpoints_to_json(
+            &compiled_std.canonical_json,
+            ProviderFormat::AnthropicMessages,
+            &plan,
+            Some("ignored"),
+        )
+        .unwrap();
+        let via_value = apply_breakpoints_to_value(
+            &mut ast,
+            ProviderFormat::AnthropicMessages,
+            &plan,
+            Some("ignored"),
+        );
+        assert_eq!(via_value, via_json);
+
+        // OpenAI Chat equivalence (`prompt_cache_key` sorted insertion).
+        let oai_raw = br#"{"temperature":0.2,"messages":[{"role":"user","content":"hello"}],"model":"gpt-4o"}"#;
+        let oai_std = compiler
+            .compile_request("t-eq", oai_raw, Some(ProviderFormat::OpenAiChat))
+            .unwrap();
+        let (_, mut oai_ast) = compiler
+            .compile_request_with_ast("t-eq", oai_raw, Some(ProviderFormat::OpenAiChat), false)
+            .unwrap();
+        let oai_via_json = apply_breakpoints_to_json(
+            &oai_std.canonical_json,
+            ProviderFormat::OpenAiChat,
+            &plan,
+            Some("cp-0123456789abcdef"),
+        )
+        .unwrap();
+        let oai_via_val = apply_breakpoints_to_value(
+            &mut oai_ast,
+            ProviderFormat::OpenAiChat,
+            &plan,
+            Some("cp-0123456789abcdef"),
+        );
+        assert_eq!(oai_via_val, oai_via_json);
+    }
+
+    #[test]
+    fn test_renumber_digit_length_change_and_block_cached_serialization() {
+        // Trigger `t10 -> v1` (2-digit temp ID renumbered to 1-digit final ID) via All-Gather reorder!
+        let mut s = "Prefix ⟦cp:t10⟧ mid ⟦cp:esc:t1⟧ end ⟦cp:t1⟧".to_string();
+        let temp_bindings: Vec<(&'static str, String)> = (1..=10)
+            .map(|i| ("opaque_id", format!("req_{i:012}")))
+            .collect();
+        let mut next_fid = 1usize;
+        let mut out_bindings = Vec::new();
+        renumber_text_anchors(&mut s, "system[0]", &temp_bindings, &mut next_fid, &mut out_bindings);
+        assert_eq!(s, "Prefix ⟦cp:v1⟧ mid ⟦cp:esc:t1⟧ end ⟦cp:v2⟧");
+        assert_eq!(out_bindings.len(), 2);
+        assert_eq!(out_bindings[0].anchor, "⟦cp:v1⟧");
+        assert_eq!(out_bindings[0].original_value, "req_000000000010");
+        assert_eq!(out_bindings[1].anchor, "⟦cp:v2⟧");
+        assert_eq!(out_bindings[1].original_value, "req_000000000001");
+        assert_eq!(
+            reconstruct_lossless(&s, &out_bindings),
+            "Prefix req_000000000010 mid ⟦cp:t1⟧ end req_000000000001"
+        );
+
+        // Verify block-cached serialization matches `serialize_canonical` byte-for-byte
+        // both with and without pre-existing `cache_control` markers!
+        let compiler = PrefixCompiler::default();
+        let with_cc = br#"{
+            "model": "claude-sonnet-4",
+            "tools": [{"name": "z_tool", "cache_control": {"type": "ephemeral"}}, {"name": "a_tool"}],
+            "system": [
+                {"type": "text", "text": "Part B 2026-11-22T15:00:00Z", "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+                {"type": "text", "text": "Part A stable"}
+            ],
+            "messages": [{"role": "user", "content": "hi"}]
+        }"#;
+        let (compiled, ast) = compiler
+            .compile_request_with_ast("t-cc", with_cc, Some(ProviderFormat::AnthropicMessages), true)
+            .unwrap();
+        let mut expected = Vec::new();
+        assert!(!serialize_canonical(&ast, &mut expected));
+        assert_eq!(compiled.canonical_json, expected);
     }
 }

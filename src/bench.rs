@@ -628,55 +628,71 @@ fn bench_live_loopback_proxy_and_herd() -> Result<(f64, f64, u64, u64), String> 
             let sp2 = Arc::clone(&sp);
             thread::spawn(move || {
                 let _ = s.set_nodelay(true);
-                let mut reader = BufReader::new(match s.try_clone() {
+                let _ = s.set_read_timeout(Some(Duration::from_secs(5)));
+                let mut reader = BufReader::with_capacity(16 * 1024, match s.try_clone() {
                     Ok(c) => c,
                     Err(_) => return,
                 });
-                let mut line = String::new();
-                if reader.read_line(&mut line).unwrap_or(0) == 0 {
-                    return;
-                }
-                let mut clen = 0usize;
                 loop {
-                    let mut h = String::new();
-                    if reader.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" || h == "\n" {
-                        break;
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        return;
                     }
-                    if let Some((k, v)) = h.split_once(':') {
-                        if k.eq_ignore_ascii_case("content-length") {
-                            clen = v.trim().parse().unwrap_or(0);
+                    let mut clen = 0usize;
+                    let mut close = false;
+                    loop {
+                        let mut h = String::new();
+                        if reader.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" || h == "\n" {
+                            break;
+                        }
+                        if let Some((k, v)) = h.split_once(':') {
+                            if k.eq_ignore_ascii_case("content-length") {
+                                clen = v.trim().parse().unwrap_or(0);
+                            } else if k.eq_ignore_ascii_case("connection")
+                                && v.to_ascii_lowercase().contains("close")
+                            {
+                                close = true;
+                            }
                         }
                     }
-                }
-                let mut body = vec![0u8; clen];
-                if clen > 0 {
-                    let _ = reader.read_exact(&mut body);
-                }
-                let delay = sp2.load(Ordering::Relaxed);
-                let h = keyed_hash64(&[1u8; 16], &body[..body.len().min(4096)]);
-                let already_warm = sw2.lock().map(|g| g.contains(&h)).unwrap_or(false);
-                if !already_warm {
-                    if delay > 0 {
-                        thread::sleep(Duration::from_millis(delay));
+                    let mut body = vec![0u8; clen];
+                    if clen > 0 && reader.read_exact(&mut body).is_err() {
+                        return;
                     }
-                    cw2.fetch_add(1, Ordering::Relaxed);
-                    if let Ok(mut g) = sw2.lock() {
-                        g.insert(h);
+                    let delay = sp2.load(Ordering::Relaxed);
+                    let h = keyed_hash64(&[1u8; 16], &body[..body.len().min(4096)]);
+                    let already_warm = sw2.lock().map(|g| g.contains(&h)).unwrap_or(false);
+                    if !already_warm {
+                        if delay > 0 {
+                            thread::sleep(Duration::from_millis(delay));
+                        }
+                        cw2.fetch_add(1, Ordering::Relaxed);
+                        if let Ok(mut g) = sw2.lock() {
+                            g.insert(h);
+                        }
+                    }
+                    let resp_body = b"{\"id\":\"msg_ok\",\"usage\":{\"input_tokens\":100,\"cache_read_input_tokens\":3200}}";
+                    let conn_hdr = if close { "close" } else { "keep-alive" };
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: {}\r\n\r\n",
+                        resp_body.len(),
+                        conn_hdr
+                    );
+                    if s.write_all(resp.as_bytes()).is_err()
+                        || s.write_all(resp_body).is_err()
+                        || s.flush().is_err()
+                    {
+                        return;
+                    }
+                    if close {
+                        return;
                     }
                 }
-                let resp_body = b"{\"id\":\"msg_ok\",\"usage\":{\"input_tokens\":100}}";
-                let resp = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    resp_body.len()
-                );
-                let _ = s.write_all(resp.as_bytes());
-                let _ = s.write_all(resp_body);
-                let _ = s.flush();
             });
         }
     });
 
-    // Helper to send one POST /v1/messages over plain TCP
+    // Helper for one-shot POST (used for simultaneous 32-agent herd burst)
     let send_post = |addr: &str, body: &[u8]| -> Result<f64, String> {
         let t0 = Instant::now();
         let mut s = TcpStream::connect(addr).map_err(|e| e.to_string())?;
@@ -693,7 +709,42 @@ fn bench_live_loopback_proxy_and_herd() -> Result<(f64, f64, u64, u64), String> 
         Ok(t0.elapsed().as_secs_f64() * 1e6)
     };
 
-    // (a) Measure direct-to-mock vs through-cachepin overhead (100 sequential warm requests, 0 ms mock sleep)
+    // Helper for persistent HTTP/1.1 keep-alive POST (matches real httpx/reqwest/urllib3 SDK pools)
+    let send_post_ka = |stream: &mut TcpStream,
+                        reader: &mut BufReader<TcpStream>,
+                        body: &[u8]|
+     -> Result<f64, String> {
+        let t0 = Instant::now();
+        let hdr = format!(
+            "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nX-Api-Key: bench-key\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(hdr.as_bytes()).map_err(|e| e.to_string())?;
+        stream.write_all(body).map_err(|e| e.to_string())?;
+        stream.flush().map_err(|e| e.to_string())?;
+        let mut clen = 0usize;
+        let mut line = String::new();
+        reader.read_line(&mut line).map_err(|e| e.to_string())?;
+        loop {
+            line.clear();
+            let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
+            if n == 0 || line == "\r\n" || line == "\n" {
+                break;
+            }
+            if let Some((k, v)) = line.split_once(':') {
+                if k.eq_ignore_ascii_case("content-length") {
+                    clen = v.trim().parse().unwrap_or(0);
+                }
+            }
+        }
+        let mut rbody = vec![0u8; clen];
+        if clen > 0 {
+            reader.read_exact(&mut rbody).map_err(|e| e.to_string())?;
+        }
+        Ok(t0.elapsed().as_secs_f64() * 1e6)
+    };
+
+    // (a) Measure direct-to-mock vs through-cachepin keep-alive overhead (120 paired warm requests, 0 ms mock sleep)
     let payload = make_realistic_agent_request(0, 0, 777);
     let mut proxy_cfg = ProxyConfig::default();
     proxy_cfg.listen_addr = "127.0.0.1:0".to_string();
@@ -703,21 +754,32 @@ fn bench_live_loopback_proxy_and_herd() -> Result<(f64, f64, u64, u64), String> 
     let proxy = start_proxy_background(proxy_cfg)?;
     let proxy_addr = proxy.bound_addr.clone();
 
-    // Warm up
-    for _ in 0..8 {
-        let _ = send_post(&mock_addr.to_string(), &payload)?;
-        let _ = send_post(&proxy_addr, &payload)?;
+    let mut direct_s = TcpStream::connect(mock_addr).map_err(|e| e.to_string())?;
+    let _ = direct_s.set_nodelay(true);
+    let mut direct_r = BufReader::new(direct_s.try_clone().map_err(|e| e.to_string())?);
+
+    let mut proxy_s = TcpStream::connect(&proxy_addr).map_err(|e| e.to_string())?;
+    let _ = proxy_s.set_nodelay(true);
+    let mut proxy_r = BufReader::new(proxy_s.try_clone().map_err(|e| e.to_string())?);
+
+    // Warm up both connections & proxy upstream pool
+    for _ in 0..10 {
+        let _ = send_post_ka(&mut direct_s, &mut direct_r, &payload)?;
+        let _ = send_post_ka(&mut proxy_s, &mut proxy_r, &payload)?;
     }
-    let mut direct_us = Vec::with_capacity(80);
-    let mut proxied_us = Vec::with_capacity(80);
-    for _ in 0..80 {
-        direct_us.push(send_post(&mock_addr.to_string(), &payload)?);
-        proxied_us.push(send_post(&proxy_addr, &payload)?);
+    let mut deltas_us = Vec::with_capacity(120);
+    for _ in 0..120 {
+        let d_us = send_post_ka(&mut direct_s, &mut direct_r, &payload)?;
+        let p_us = send_post_ka(&mut proxy_s, &mut proxy_r, &payload)?;
+        deltas_us.push((p_us - d_us).max(0.0));
     }
-    direct_us.sort_by(|a, b| a.total_cmp(b));
-    proxied_us.sort_by(|a, b| a.total_cmp(b));
-    let overhead_p50 = (percentile(&proxied_us, 0.50) - percentile(&direct_us, 0.50)).max(1.0);
-    let overhead_p99 = (percentile(&proxied_us, 0.99) - percentile(&direct_us, 0.99)).max(1.0);
+    drop(direct_r);
+    drop(direct_s);
+    drop(proxy_r);
+    drop(proxy_s);
+    deltas_us.sort_by(|a, b| a.total_cmp(b));
+    let overhead_p50 = percentile(&deltas_us, 0.50);
+    let overhead_p99 = percentile(&deltas_us, 0.99);
     proxy.stop();
 
     // (b) 32-Agent Simultaneous Cold-Start Thundering Herd (60 ms simulated prefill)

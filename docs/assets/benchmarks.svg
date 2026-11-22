@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 390" width="960" height="390" role="img" aria-label="cachepin verified benchmark comparison">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1018"/>
+      <stop offset="100%" stop-color="#070a10"/>
+    </linearGradient>
+    <linearGradient id="gGreen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+    <linearGradient id="gCyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="gAmber" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="gRed" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#dc2626"/>
+      <stop offset="100%" stop-color="#f87171"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="390" rx="14" fill="url(#bg)" stroke="#1e293b" stroke-width="1.5"/>
+
+  <!-- Header -->
+  <text x="28" y="38" fill="#f1f5f9" font-family="ui-sans-serif,-apple-system,Segoe UI,Inter,sans-serif" font-size="18" font-weight="700">cachepin — Verified Live-CPU &amp; Swarm Benchmarks</text>
+  <text x="28" y="58" fill="#94a3b8" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5">Generated verbatim from benchmarks/results.json · Zero external crates · SIMD: AVX2</text>
+
+  <!-- Left Panel: Compile Latency P50 [LIVE-CPU] -->
+  <rect x="24" y="76" width="446" height="178" rx="10" fill="#111827" stroke="#1f2937"/>
+  <text x="42" y="102" fill="#e2e8f0" font-family="ui-sans-serif,system-ui,sans-serif" font-size="13.5" font-weight="700">18.5 KiB Full Request Compile P50 (lower is better)</text>
+  <rect x="382" y="88" width="72" height="18" rx="4" fill="#0f2937" stroke="#0369a1"/>
+  <text x="418" y="101" text-anchor="middle" fill="#38bdf8" font-family="ui-monospace,monospace" font-size="9.5" font-weight="700">LIVE-CPU</text>
+
+  <text x="42" y="133" fill="#34d399" font-family="ui-monospace,monospace" font-size="12" font-weight="700">cachepin (Rust AVX2)</text>
+  <rect x="42" y="140" width="12.1" height="16" rx="4" fill="url(#gGreen)"/>
+  <text x="60.1" y="152" fill="#34d399" font-family="ui-monospace,monospace" font-size="12" font-weight="700">84.2 µs (22.3× vs Py)</text>
+
+  <text x="42" y="178" fill="#cbd5e1" font-family="ui-monospace,monospace" font-size="12">Node.js 22 (V8 JIT)</text>
+  <rect x="42" y="185" width="41.8" height="16" rx="4" fill="url(#gAmber)"/>
+  <text x="89.8" y="197" fill="#fbbf24" font-family="ui-monospace,monospace" font-size="12">290.3 µs (3.45× slower)</text>
+
+  <text x="42" y="223" fill="#cbd5e1" font-family="ui-monospace,monospace" font-size="12">Python 3.12 (stdlib)</text>
+  <rect x="42" y="230" width="270.0" height="16" rx="4" fill="url(#gRed)"/>
+  <text x="318.0" y="242" fill="#f87171" font-family="ui-monospace,monospace" font-size="12">1876.3 µs</text>
+
+  <!-- Right Panel: 32-Agent Swarm Cache Hit Rate [SIM-TRACE] -->
+  <rect x="490" y="76" width="446" height="178" rx="10" fill="#111827" stroke="#1f2937"/>
+  <text x="508" y="102" fill="#e2e8f0" font-family="ui-sans-serif,system-ui,sans-serif" font-size="13.5" font-weight="700">32-Agent Coding Swarm Prefix Hit Rate</text>
+  <rect x="844" y="88" width="76" height="18" rx="4" fill="#1e1b4b" stroke="#4f46e5"/>
+  <text x="882" y="101" text-anchor="middle" fill="#a5b4fc" font-family="ui-monospace,monospace" font-size="9.5" font-weight="700">SIM-TRACE</text>
+
+  <text x="508" y="138" fill="#f87171" font-family="ui-monospace,monospace" font-size="12">Raw Un-Canonicalized Swarm</text>
+  <rect x="508" y="146" width="270.0" height="18" rx="5" fill="#1e293b"/>
+  <rect x="508" y="146" width="8.0" height="18" rx="5" fill="url(#gRed)"/>
+  <text x="790" y="160" fill="#f87171" font-family="ui-monospace,monospace" font-size="12.5" font-weight="700">2.24% hit</text>
+
+  <text x="508" y="190" fill="#34d399" font-family="ui-monospace,monospace" font-size="12" font-weight="700">After cachepin (100% Lossless)</text>
+  <rect x="508" y="198" width="270.0" height="18" rx="5" fill="#1e293b"/>
+  <rect x="508" y="198" width="265.8" height="18" rx="5" fill="url(#gGreen)"/>
+  <text x="790" y="212" fill="#34d399" font-family="ui-monospace,monospace" font-size="12.5" font-weight="700">98.44% hit</text>
+
+  <text x="508" y="242" fill="#38bdf8" font-family="ui-monospace,monospace" font-size="12" font-weight="700">Cost impact: -93.50% spend (15.39× cheaper, exact lossless bijection)</text>
+
+  <!-- Bottom Strip: 4 Frontier KPIs -->
+  <rect x="24" y="270" width="218" height="96" rx="10" fill="#111827" stroke="#1f2937"/>
+  <text x="40" y="294" fill="#94a3b8" font-family="ui-monospace,monospace" font-size="10.5">SIMD LCP DIFF [LIVE-CPU]</text>
+  <text x="40" y="328" fill="#38bdf8" font-family="ui-monospace,monospace" font-size="24" font-weight="700">42.56 GB/s</text>
+  <text x="40" y="350" fill="#cbd5e1" font-family="ui-monospace,monospace" font-size="11">50.3× vs Node · 2108× vs Py</text>
+
+  <rect x="256" y="270" width="218" height="96" rx="10" fill="#111827" stroke="#1f2937"/>
+  <text x="272" y="294" fill="#94a3b8" font-family="ui-monospace,monospace" font-size="10.5">THUNDERING HERD [LIVE-CPU]</text>
+  <text x="272" y="328" fill="#34d399" font-family="ui-monospace,monospace" font-size="24" font-weight="700">32 → 1</text>
+  <text x="272" y="350" fill="#cbd5e1" font-family="ui-monospace,monospace" font-size="11">cold writes (-96.9%)</text>
+
+  <rect x="488" y="270" width="218" height="96" rx="10" fill="#111827" stroke="#1f2937"/>
+  <text x="504" y="294" fill="#94a3b8" font-family="ui-monospace,monospace" font-size="10.5">EXACT DP SOLVER [LIVE-CPU]</text>
+  <text x="504" y="328" fill="#38bdf8" font-family="ui-monospace,monospace" font-size="24" font-weight="700">8.04 µs</text>
+  <text x="504" y="350" fill="#cbd5e1" font-family="ui-monospace,monospace" font-size="11">O(M²K) mixed 1h/5m (&lt;1e-12)</text>
+
+  <rect x="720" y="270" width="216" height="96" rx="10" fill="#111827" stroke="#1f2937"/>
+  <text x="736" y="294" fill="#94a3b8" font-family="ui-monospace,monospace" font-size="10.5">CLI COLD START [LIVE-CPU]</text>
+  <text x="736" y="328" fill="#34d399" font-family="ui-monospace,monospace" font-size="24" font-weight="700">2.53 ms</text>
+  <text x="736" y="350" fill="#cbd5e1" font-family="ui-monospace,monospace" font-size="11">22.4× vs Node · 14.2× vs Py</text>
+</svg>
