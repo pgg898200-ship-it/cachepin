@@ -18,6 +18,10 @@ The 15 KB wheel includes the example and requires only the Python standard libra
 
 ## What happens on real requests?
 
+[![At 400 requests/s a backup cut 6 ms deadline misses from 10.1% to 1.3%. At 1,600 requests/s misses rose from 26.9% to 98.8%.](experiments/shared-slots/deadline-misses.png)](experiments/shared-slots/hedging-under-load.ipynb)
+
+Two replicas shared two worker slots and every launched copy ran to completion. Change the deadline and count misses across all 36,800 requests. [Run in Colab](https://colab.research.google.com/github/pgg898200-ship-it/cachepin/blob/racecurve/experiments/shared-slots/hedging-under-load.ipynb) · [Read the executed notebook](experiments/shared-slots/hedging-under-load.ipynb)
+
 | Experiment | Observed outcome |
 | --- | --- |
 | Prospective localhost HTTP A/B with controlled stalls | At a delay fixed in advance at 1,177 µs, 6 ms deadline misses fell from 80 to 9 in 1,000 matched requests. The client issued 126 backups. Median latency rose from 789 to 810 µs. |
