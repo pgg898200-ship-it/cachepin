@@ -1,4 +1,4 @@
-<img align="right" src="docs/product-mark.svg" width="88" height="88" alt="A pin holds the shared prefix of three prompt sheets.">
+<img align="right" src="docs/product-mark.svg" width="88" height="88" alt="Three requests share a prompt prefix. A blue breakpoint sits where their suffixes diverge.">
 
 # CachePin
 
