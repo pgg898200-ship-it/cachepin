@@ -1,6 +1,8 @@
+<img align="right" src="docs/product-mark.svg" width="88" height="88" alt="A pin holds the shared prefix of three prompt sheets.">
+
 # CachePin
 
-**Find where two LLM requests stop sharing a prompt prefix.** Two agents can send the same tools and runbook in a different order. CachePin shows the first differing byte, identifies the changed block, and estimates how much of the next request could be reused if both clients serialized it the same way.
+**Find where two LLM requests stop sharing a prompt prefix.** Two agents can use the same runbook and tools but list the tools in different orders. CachePin shows the first differing byte, identifies the changed block, and estimates how much of the next request could be reused if both clients serialized it the same way.
 
 [Compare two prompts in your browser](https://pgg898200-ship-it.github.io/cachepin/#compare) · [Download the CLI](https://github.com/pgg898200-ship-it/cachepin/releases/latest) · [Connect an MCP client](docs/INTEGRATIONS.md#3-native-mcp-server-claude-code-codex-cursor-gemini-cli-opencode)
 
