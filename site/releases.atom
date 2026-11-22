@@ -3,7 +3,7 @@
   <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom</id>
   <title>PGG Engineering release notes</title>
   <subtitle>Runnable examples and measured results from PGG Engineering.</subtitle>
-  <updated>2026-11-22T21:34:04Z</updated>
+  <updated>2026-11-22T21:46:05Z</updated>
   <author>
     <name>PGG Engineering</name>
     <uri>https://github.com/pgg898200-ship-it</uri>
@@ -34,10 +34,11 @@
   <entry>
     <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom#racecurve-shared-slots</id>
     <title>Racecurve measures when a backup request makes the queue slower</title>
-    <updated>2026-11-22T21:12:00Z</updated>
+    <updated>2026-11-22T21:46:05Z</updated>
     <link rel="alternate" type="text/html" href="https://pgg898200-ship-it.github.io/cachepin/racecurve/"/>
     <link rel="related" type="text/html" title="Executed notebook" href="https://github.com/pgg898200-ship-it/cachepin/blob/f93cc10e6770a7a839f5bb05d9de2c6a3a08fa99/experiments/shared-slots/hedging-under-load.ipynb"/>
     <link rel="related" href="https://huggingface.co/datasets/pgg-engineering/racecurve-hedge-traces" title="Request traces"/>
+    <link rel="related" title="Inspect eight requests in Perfetto" href="https://ui.perfetto.dev/#!/?url=https://pgg898200-ship-it.github.io/cachepin/racecurve/shared-slots.trace.json"/>
     <category term="request hedging"/>
     <summary>Two replicas shared two worker slots. Sending a backup after 1.177 ms cut 6 ms deadline misses from 10.1% to 1.3% at 400 requests/s. At 1,600 requests/s, misses rose from 26.9% to 98.8%. Both copies ran to completion. The notebook lets you change the deadline and count misses across 36,800 measured requests from this host-local experiment.</summary>
   </entry>
