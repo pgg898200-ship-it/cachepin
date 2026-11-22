@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PGG Engineering · Tool index</title>
+<meta name="description" content="Choose a PGG Engineering tool for search, inference, state replication, telemetry or evaluation. Browse practical examples and source code.">
+<link rel="canonical" href="https://pgg898200-ship-it.github.io/cachepin/tools/">
+<meta property="og:title" content="PGG Engineering · Tool index">
+<meta property="og:description" content="25 engineering tools. Find a task, try an example and inspect the source.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pgg898200-ship-it.github.io/cachepin/tools/">
+<meta property="og:image" content="https://pgg898200-ship-it.github.io/cachepin/tools/cover.png">
+<meta property="og:image:alt" content="PGG Engineering’s visual index of 25 developer tools.">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#fff3d7">
+<style>
+:root{--paper:#fff3d7;--ink:#171729;--blue:#384cfa;--red:#ef543c;--line:rgba(23,23,41,.27);--serif:'DejaVu Serif',Georgia,serif;--sans:'DejaVu Sans',Arial,sans-serif;--mono:'DejaVu Sans Mono',ui-monospace,monospace;color-scheme:light;font-family:var(--sans);color:var(--ink);background:var(--paper);font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}a{color:inherit;text-underline-offset:.24em;text-decoration-thickness:1px}a:hover{color:var(--blue)}a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--blue);outline-offset:4px}h1,h2,h3,h4,p,figure,ul{margin:0}ul{list-style:none;padding:0}button{font:inherit;color:inherit;cursor:pointer}a,button{-webkit-tap-highlight-color:transparent}::selection{background:var(--blue);color:var(--paper)}[hidden]{display:none!important}
+.page{width:min(100% - clamp(36px,10vw,160px),1320px);margin:auto}.skip{position:absolute;background:var(--ink);color:var(--paper);padding:.8em;transform:translateY(-180%);z-index:3}.skip:focus{transform:translateY(0)}
+.header{display:flex;align-items:center;justify-content:space-between;padding:23px 0;border-bottom:1px solid var(--ink)}.wordmark{font:700 clamp(18px,2.1vw,25px)/1 var(--serif);letter-spacing:-.055em;text-decoration:none}.header nav,.actions,.links{display:flex;align-items:center;gap:24px}.header nav,.actions,.links,.controls{font-size:14px}.header nav a,.links a{display:inline-flex;align-items:center;gap:.25em;min-height:40px}.index-link{text-decoration:none}.index-link span,.out{font-family:var(--mono)}
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:7%;align-items:center;padding:clamp(38px,5vw,76px) 0 clamp(45px,5.2vw,78px)}.hero-copy{max-width:625px}.category{display:inline-block;font:12px/1.4 var(--mono);letter-spacing:.09em;text-transform:uppercase;text-decoration:none}.hero h1{margin:.15em 0 .13em;font:700 clamp(76px,8.9vw,141px)/1 var(--serif);letter-spacing:-.088em}.lead{max-width:37ch;font-size:clamp(19px,1.72vw,25px);line-height:1.43;letter-spacing:-.035em}.actions{margin-top:27px;gap:22px}.primary{padding:13px 19px;background:var(--ink);color:var(--paper);text-decoration:none}.primary:hover{background:var(--blue);color:var(--paper)}.out{padding-left:.23em}.actions a{display:inline-flex;align-items:center;min-height:46px}
+.specimen{padding:0;max-width:535px;width:100%;align-self:center;justify-self:center}.specimen-art{position:relative;height:clamp(183px,22vw,327px)}.specimen svg{position:absolute;inset:0;display:block;width:100%;height:100%}.specimen figcaption{padding-top:10px;border-top:1px solid var(--ink);display:grid;grid-template-columns:1fr auto;gap:4px 16px;align-items:start}.specimen-title{font:700 14px/1.5 var(--sans)}.specimen-output{font:13px/1.6 var(--mono)}.controls{grid-column:2;grid-row:1 / 3;display:flex;gap:2px}.controls button{background:transparent;border:1px solid transparent;font:12px/1.2 var(--mono);padding:6px 9px;min-height:32px}.controls button[aria-pressed=true]{border-color:var(--ink)}.controls button:hover{color:var(--blue)}
+#afterkey-mark g>path{transition:opacity .24s ease,translate .26s ease}#afterkey-mark[data-view=reader] g>path:nth-child(-n+2){opacity:0;translate:0 -15px}
+.index{border-top:2px solid var(--ink);padding-top:30px}.index-head{display:grid;grid-template-columns:1fr 1.2fr;gap:25px;align-items:start;margin-bottom:38px}.index h2{font:700 clamp(45px,5.4vw,80px)/1.05 var(--serif);letter-spacing:-.073em}.index nav{display:flex;flex-wrap:wrap;align-content:start;gap:5px 19px;padding-top:4px}.index nav a{min-height:35px;display:inline-flex;align-items:center;font-size:14px;line-height:1.4;text-decoration:none;border-bottom:1px solid var(--line)}.index nav a:hover{border-color:var(--blue)}.group{margin:0 0 42px}.group h3{border-top:1px solid var(--ink);padding:12px 0 11px;font:600 14px/1.5 var(--mono);letter-spacing:-.02em}.entry{display:grid;grid-template-columns:90px minmax(125px,1fr) minmax(210px,1.8fr) auto;gap:24px;align-items:center;min-height:108px;border-top:1px solid var(--line)}.entry h4{font:700 clamp(22px,2.3vw,35px)/1.1 var(--serif);letter-spacing:-.065em}.entry h4 a{text-decoration:none}.entry p{max-width:48ch;font-size:clamp(15px,1.25vw,18px);line-height:1.48;letter-spacing:-.018em}.glyph{width:79px;aspect-ratio:1;display:grid;place-items:center}.glyph svg{display:block;width:100%;height:100%}.links{gap:16px;white-space:nowrap}.links a:first-child{color:var(--blue)}footer{display:flex;justify-content:space-between;align-items:center;padding:20px 0 35px;border-top:1px solid var(--ink);font-size:14px}footer a{display:inline-flex;align-items:center;min-height:40px}
+@media(max-width:820px){.page{width:calc(100% - 54px)}.hero{gap:22px}.entry{grid-template-columns:64px minmax(115px,1fr) minmax(170px,1.65fr) auto;gap:15px}.glyph{width:64px}.links{flex-direction:column;gap:0;align-items:start}.links a{min-height:32px}.specimen figcaption{display:flex;flex-wrap:wrap;gap:2px 10px}.specimen-output{flex-basis:100%}.controls{margin-top:4px}.index-head{grid-template-columns:1fr 1.45fr}}
+@media(max-width:640px){.page{width:calc(100% - 38px)}.header{padding:9px 0}.header nav{gap:15px;font-size:12px}.hero{grid-template-columns:1fr;gap:22px;padding:32px 0 30px}.hero h1{font-size:clamp(65px,15.5vw,94px);margin:6px 0 11px}.lead{font-size:19px;line-height:1.4}.category{font-size:11px}.actions{margin-top:16px}.specimen{max-width:none}.specimen-art{height:158px}.specimen figcaption{display:grid;grid-template-columns:1fr auto;gap:0 8px}.controls{margin:0}.controls button{min-height:38px;padding:5px 7px}.specimen-title{font-size:13px}.specimen-output{font-size:12px}.index{padding-top:24px}.index-head{grid-template-columns:1fr;gap:13px;margin-bottom:25px}.index nav{gap:0 16px;padding:0}.index nav a{font-size:13px;min-height:34px}.group{margin-bottom:30px}.group h3{font-size:13px}.entry{grid-template-columns:61px 1fr;gap:4px 13px;min-height:0;padding:16px 0 9px}.glyph{width:60px;grid-column:1;grid-row:1 / 4;align-self:start}.entry h4{font-size:25px}.entry p{font-size:15px;line-height:1.42}.links{grid-column:2;flex-direction:row;gap:18px;font-size:13px}.links a{min-height:34px}footer{font-size:13px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body id="top"><div class="page">
+<a class="skip" href="#index">Skip to the tool index</a>
+<header class="header"><a class="wordmark" href="#top">PGG Engineering</a><nav aria-label="Main"><a class="index-link" href="#index">Tool index <span aria-hidden="true">↓</span></a><a href="https://github.com/pgg898200-ship-it">GitHub <span class="out" aria-hidden="true">↗</span></a></nav></header>
+<main>
+<section class="hero" aria-labelledby="feature-name"><div class="hero-copy"><a class="category" href="#group-afterkey">State replication</a><h1 id="feature-name">Afterkey</h1><p class="lead">When a reader reconnects, give it the latest value or deletion for each key written since its last revision.</p><div class="actions"><a class="primary" href="https://huggingface.co/spaces/pgg-engineering/afterkey">Try Afterkey <span class="out" aria-hidden="true">↗</span></a><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/afterkey">Read the source</a></div></div>
+<figure class="specimen"><div class="specimen-art"><svg xmlns="http://www.w3.org/2000/svg" viewBox="11 43 227 174" role="img" aria-label="Afterkey returns the latest value or deletion for each key changed after a reader’s cursor." id="afterkey-mark"><g transform="rotate(-13 128 128)"><path transform="translate(-4 66)" fill="#384cfa" fill-rule="evenodd" d="M30 62C30 39 47 22 71 22S112 39 112 62C112 71 108 79 104 85H214V107H203V124H184V111H171V123H151V111H94C88 114 79 117 69 117C47 117 30 98 30 78ZM45 59C45 69 51 76 61 76S77 69 77 59S71 43 61 43S45 50 45 59Z" /><path transform="translate(2 45)" fill="#ef543c" fill-rule="evenodd" d="M30 62C30 39 47 22 71 22S112 39 112 62C112 71 108 79 104 85H214V107H203V124H184V111H171V123H151V111H94C88 114 79 117 69 117C47 117 30 98 30 78ZM45 59C45 69 51 76 61 76S77 69 77 59S71 43 61 43S45 50 45 59Z" /><path transform="translate(8 24)" fill="#171729" fill-rule="evenodd" d="M30 62C30 39 47 22 71 22S112 39 112 62C112 71 108 79 104 85H214V107H203V124H184V111H171V123H151V111H94C88 114 79 117 69 117C47 117 30 98 30 78ZM45 59C45 69 51 76 61 76S77 69 77 59S71 43 61 43S45 50 45 59Z" /></g></svg></div><figcaption><span class="specimen-title">Worker 0 · available slots</span><span class="specimen-output" id="readout" aria-live="polite">8 → 7 → 6. Reader gets 6.</span><div class="controls" aria-label="Afterkey example" role="group" hidden><button type="button" data-view="writes" aria-pressed="true">Writes</button><button type="button" data-view="reader" aria-pressed="false">Catch-up</button></div></figcaption></figure></section>
+<section class="index" aria-labelledby="index"><div class="index-head"><h2 id="index" tabindex="-1">Tool index</h2><nav aria-label="Jump to a task"><a href="#group-rankpatch">Search and retrieval</a>
+<a href="#group-cachepin">LLM serving and workflow latency</a>
+<a href="#group-afterkey">State replication and event routing</a>
+<a href="#group-backfold">Telemetry, time series and forecasts</a>
+<a href="#group-cloture">Evaluation and sequential decisions</a></nav></div>
+<section class="group" aria-labelledby="group-rankpatch"><h3 id="group-rankpatch" tabindex="-1">Search and retrieval</h3><ul><li class="entry" id="rankpatch">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A vermilion replacement strip slides into a stack of ranked results.">
+<g transform="rotate(-8 128 128)">
+  <path d="M35 44 H182 L204 65 L184 84 H35 Z" fill="#171729" />
+  <path d="M35 96 H143 L128 113 L143 134 H35 Z" fill="#171729" />
+  <path d="M35 148 H188 L204 168 L186 187 H35 Z" fill="#171729" />
+  <path d="M35 199 H151 L164 213 L151 226 H35 Z" fill="#171729" />
+  <path d="M157 97 H221 L239 116 L220 136 H157 L141 115 Z" fill="#ef543c" />
+  <path d="M169 105 L156 120 M187 105 L167 129 M204 105 L184 129" fill="none" stroke="#fff3d7" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+</g>
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/rankpatch">RankPatch</a></h4>
+  <p>Replace one ranked list. Read the revised top k.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/rankpatch" aria-label="RankPatch — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/rankpatch" aria-label="RankPatch source">Source</a></div>
+</li>
+<li class="entry" id="rankseal">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A serrated seal encloses three ordered bars to represent a ranking certified from partial lists.">
+  <polygon points="128,20 142.9,32.2 160.8,25.2 171.1,41.4 190.3,40.2 195.2,58.8 213.8,63.7 212.6,82.9 228.8,93.2 221.8,111.1 234,126 221.8,140.9 228.8,158.8 212.6,169.1 213.8,188.3 195.2,193.2 190.3,211.8 171.1,210.6 160.8,226.8 142.9,219.8 128,232 113.1,219.8 95.2,226.8 84.9,210.6 65.7,211.8 60.8,193.2 42.2,188.3 43.4,169.1 27.2,158.8 34.2,140.9 22,126 34.2,111.1 27.2,93.2 43.4,82.9 42.2,63.7 60.8,58.8 65.7,40.2 84.9,41.4 95.2,25.2 113.1,32.2" fill="#171729" />
+  <circle cx="128" cy="126" r="78" fill="#fff3d7" />
+  <circle cx="128" cy="126" r="70" fill="#171729" />
+  <circle cx="128" cy="126" r="56" fill="#ef543c" />
+<g transform="rotate(-10 128 126)">
+  <path d="M91 103 H165 L159 114 H87 Z" fill="#171729" />
+  <path d="M86 121 H154 L148 132 H84 Z" fill="#171729" />
+  <path d="M88 139 H140 L134 150 H91 Z" fill="#171729" />
+</g>
+</svg></div>
+  <h4><a href="https://huggingface.co/spaces/pgg-engineering/rankseal/tree/main">RankSeal</a></h4>
+  <p>Prove the ordered top k while results arrive in pages.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/rankseal" aria-label="RankSeal — Try it">Try it</a><a href="https://huggingface.co/spaces/pgg-engineering/rankseal/tree/main" aria-label="RankSeal source">Source</a></div>
+</li>
+<li class="entry" id="rankfence">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Two groups of ranked streams stop at a common cutoff, leaving later results unread.">
+  <path d="M24 61 L95 45 L153 84 L153 103 L93 69 L24 86 Z" fill="#171729" />
+  <path d="M24 96 L92 79 L153 112 L153 132 L90 103 L24 120 Z" fill="#171729" />
+  <path d="M24 161 L94 142 L153 141 L153 162 L95 167 L24 188 Z" fill="#384cfa" />
+  <path d="M24 197 L95 177 L153 172 L153 191 L97 201 L24 223 Z" fill="#384cfa" />
+  <path d="M161 47 L180 38 V209 L161 218 Z" fill="#ef543c" />
+  <path d="M192 88 L207 95 V106 L192 101 Z M215 101 L230 107 V118 L215 113 Z M192 118 L207 123 V133 L192 129 Z M215 127 L230 130 V141 L215 138 Z M192 149 L207 146 V157 L192 160 Z M215 145 L230 142 V153 L215 156 Z M192 178 L207 173 V184 L192 189 Z M215 171 L230 166 V177 L215 182 Z" fill="#171729" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/rankfence-mcp-0.1.0">RankFence</a></h4>
+  <p>Use a shard map to stop rank fusion once the top k is settled.</p>
+  <div class="links"><a href="https://rankfence-pgg.tancurl3.chatgpt.site/workbench.html" aria-label="RankFence — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/rankfence-mcp-0.1.0" aria-label="RankFence source">Source</a></div>
+</li></ul></section>
+<section class="group" aria-labelledby="group-cachepin"><h3 id="group-cachepin" tabindex="-1">LLM serving and workflow latency</h3><ul><li class="entry" id="cachepin">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A pin holds the shared portion of three stacked prompt sheets at a cache breakpoint.">
+  <polygon points="24,172 140,148 209,182 91,209" fill="#171729" />
+  <polygon points="24,151 140,127 209,161 91,188" fill="#384cfa" />
+  <polygon points="24,130 140,106 209,140 91,167" fill="#171729" />
+  <path d="M90 149 L141 63 L153 71 L104 153 L85 168 Z" fill="#ef543c" />
+  <path d="M118 45 Q142 20 169 24 Q190 28 195 44 Q199 58 186 70 L176 77 L181 96 L158 113 L122 90 L103 79 L117 62 L130 60 Z" fill="#171729" />
+  <path d="M133 45 Q151 29 169 32 Q181 34 185 43 Q171 58 150 60 Z" fill="#ef543c" />
+  <path d="M43 149 L80 167 M58 145 L86 158" fill="none" stroke="#fff3d7" stroke-width="4" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/cachepin">CachePin</a></h4>
+  <p>Build reusable prompt prefixes and choose cache breakpoints.</p>
+  <div class="links"><a href="https://pgg898200-ship-it.github.io/cachepin/" aria-label="CachePin — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/cachepin" aria-label="CachePin source">Source</a></div>
+</li>
+<li class="entry" id="prefix-atlas">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Nested contour lines represent the cache capacities explored for a target prompt-prefix hit rate.">
+  <path d="M23 149 C36 107 43 55 81 40 C112 28 145 53 173 41 C196 32 219 45 222 73 C226 104 205 124 211 153 C218 193 197 213 162 211 C132 208 98 234 70 215 C41 197 11 191 23 149 Z" fill="none" stroke="#171729" stroke-width="10" />
+  <path d="M48 148 C60 112 60 75 89 63 C112 54 142 77 171 64 C190 55 200 66 199 85 C198 106 182 126 188 150 C194 179 182 190 158 188 C129 185 104 207 84 195 C61 181 37 177 48 148 Z" fill="none" stroke="#384cfa" stroke-width="9" />
+  <path d="M74 145 C82 121 82 94 103 88 C122 82 143 99 161 89 C174 82 181 89 176 105 C168 123 159 139 166 155 C171 168 158 172 142 168 C124 164 110 184 96 173 C79 162 69 160 74 145 Z" fill="none" stroke="#171729" stroke-width="8" />
+  <path d="M99 138 C106 121 105 110 118 110 C127 108 137 119 150 113 C150 124 142 133 145 145 C136 142 125 143 120 151 C112 154 93 152 99 138 Z" fill="#ef543c" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/cachepin/tree/main/tools/prefix-atlas">Prefix Atlas</a></h4>
+  <p>Size a prefix cache for a target hit rate on a recorded serving trace.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/prefix-atlas" aria-label="Prefix Atlas — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/cachepin/tree/main/tools/prefix-atlas" aria-label="Prefix Atlas source">Source</a></div>
+</li>
+<li class="entry" id="cutstream">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A blade cuts a stream at a stop sequence that straddles the seam between two chunks.">
+  <path d="M20 151 C62 156 69 99 112 98 L146 98 L129 123 H112 C86 123 78 183 20 180 Z" fill="#171729" />
+  <path d="M20 185 C79 192 91 130 112 130 H123 L109 154 C91 160 78 218 20 213 Z" fill="#171729" />
+  <path d="M145 128 L164 98 C187 89 212 96 237 57 V87 C219 115 198 116 182 120 Z" fill="#384cfa" />
+  <path d="M130 155 L143 134 L180 126 C201 121 222 121 237 99 V130 C223 146 208 150 185 155 Z" fill="#384cfa" />
+  <path d="M118 188 L139 149 L169 99 L199 38 L193 25 L170 40 L104 178 Z" fill="#ef543c" />
+  <path d="M182 44 L117 171" fill="none" stroke="#fff3d7" stroke-width="3" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/cachepin/tree/main/cutstream">Cutstream</a></h4>
+  <p>Catch stop strings that cross response chunks.</p>
+  <div class="links"><a href="https://github.com/pgg898200-ship-it/cachepin/blob/main/cutstream/examples/gateway.py" aria-label="Cutstream — Example">Example</a><a href="https://github.com/pgg898200-ship-it/cachepin/tree/main/cutstream" aria-label="Cutstream source">Source</a></div>
+</li>
+<li class="entry" id="eventfold">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A pleated frame carries a single highlighted edit across successive folds.">
+  <path d="M25 59 L88 83 V209 L25 180 Z" fill="#171729" />
+  <path d="M88 83 L150 43 V170 L88 209 Z" fill="#384cfa" />
+  <path d="M150 43 L195 76 V201 L150 170 Z" fill="#171729" />
+  <path d="M195 76 L231 48 V173 L195 201 Z" fill="#384cfa" />
+  <path d="M35 96 L79 113 M35 123 L79 140 M35 150 L79 168 M99 113 L137 89 M99 141 L137 117 M99 169 L137 145 M159 87 L187 107 M159 115 L187 135 M159 143 L187 163 M204 107 L221 93 M204 135 L221 121 M204 163 L221 149" fill="none" stroke="#fff3d7" stroke-width="4" />
+  <path d="M121 98 L146 82 L176 104 V129 L146 108 L121 124 Z" fill="#ef543c" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/backfold/tree/eventfold-v0.1/companions/eventfold">EventFold</a></h4>
+  <p>Send each SSE frame as edits to its predecessor. Restore the exact bytes.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/eventfold" aria-label="EventFold — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/backfold/tree/eventfold-v0.1/companions/eventfold" aria-label="EventFold source">Source</a></div>
+</li>
+<li class="entry" id="racecurve">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A backup request starts later and races the first request toward the same deadline.">
+  <path d="M28 200 C83 199 99 187 127 145 C156 100 167 63 208 43 L214 55 C179 72 166 112 141 155 C109 209 87 225 28 226 Z" fill="#171729" />
+  <path d="M99 206 C117 198 142 179 163 136 C182 98 191 86 216 74 L222 86 C201 98 195 114 179 148 C160 187 135 216 106 228 Z" fill="#384cfa" />
+  <circle cx="31" cy="213" r="15" fill="#171729" />
+  <circle cx="105" cy="216" r="14" fill="#ef543c" />
+  <path d="M188 41 L200 26 L208 33 L197 49 Z M207 57 L217 41 L227 47 L217 65 Z M218 72 L229 57 L238 64 L228 81 Z" fill="#ef543c" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/cachepin/tree/racecurve">Racecurve</a></h4>
+  <p>Test a backup request delay against paired latency traces.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/racecurve" aria-label="Racecurve — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/cachepin/tree/racecurve" aria-label="Racecurve source">Source</a></div>
+</li>
+<li class="entry" id="pathprobe-dag">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Two dependency paths converge, with one task highlighted for duration analysis.">
+  <path d="M42 129 L100 61 L159 61 L210 129" fill="none" stroke="#171729" stroke-width="12" />
+  <path d="M42 129 L103 191 L156 191 L210 129" fill="none" stroke="#384cfa" stroke-width="12" />
+  <path d="M100 61 L156 191" fill="none" stroke="#171729" stroke-width="7" />
+  <polygon points="19,129 42,106 65,129 42,152" fill="#171729" />
+  <path d="M79 44 L114 38 L122 70 L87 79 Z" fill="#171729" />
+  <path d="M141 40 L173 37 L182 67 L150 76 Z" fill="#ef543c" />
+  <path d="M149 51 L157 64 M160 46 L168 60" fill="none" stroke="#fff3d7" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="103" cy="191" r="18" fill="#384cfa" />
+  <circle cx="156" cy="191" r="18" fill="#384cfa" />
+  <polygon points="186,129 210,105 235,129 210,154" fill="#171729" />
+  <circle cx="210" cy="129" r="8" fill="#fff3d7" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/causalsieve/tree/main/tools/pathprobe">PathProbe DAG</a></h4>
+  <p>Change one task’s duration. See when the whole workflow finishes.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/pathprobe-dag" aria-label="PathProbe DAG — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/causalsieve/tree/main/tools/pathprobe" aria-label="PathProbe DAG source">Source</a></div>
+</li></ul></section>
+<section class="group" aria-labelledby="group-afterkey"><h3 id="group-afterkey" tabindex="-1">State replication and event routing</h3><ul><li class="entry" id="afterkey">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Afterkey returns the latest value or deletion for each key changed after a reader’s cursor."><g transform="rotate(-13 128 128)"><path transform="translate(-4 66)" fill="#384cfa" fill-rule="evenodd" d="M30 62C30 39 47 22 71 22S112 39 112 62C112 71 108 79 104 85H214V107H203V124H184V111H171V123H151V111H94C88 114 79 117 69 117C47 117 30 98 30 78ZM45 59C45 69 51 76 61 76S77 69 77 59S71 43 61 43S45 50 45 59Z" /><path transform="translate(2 45)" fill="#ef543c" fill-rule="evenodd" d="M30 62C30 39 47 22 71 22S112 39 112 62C112 71 108 79 104 85H214V107H203V124H184V111H171V123H151V111H94C88 114 79 117 69 117C47 117 30 98 30 78ZM45 59C45 69 51 76 61 76S77 69 77 59S71 43 61 43S45 50 45 59Z" /><path transform="translate(8 24)" fill="#171729" fill-rule="evenodd" d="M30 62C30 39 47 22 71 22S112 39 112 62C112 71 108 79 104 85H214V107H203V124H184V111H171V123H151V111H94C88 114 79 117 69 117C47 117 30 98 30 78ZM45 59C45 69 51 76 61 76S77 69 77 59S71 43 61 43S45 50 45 59Z" /></g></svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/afterkey">Afterkey</a></h4>
+  <p>Catch up a reader with one value or deletion per key written since its cursor.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/afterkey" aria-label="Afterkey — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/afterkey" aria-label="Afterkey source">Source</a></div>
+</li>
+<li class="entry" id="tailstate">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Tailstate pages through the latest changed keys in sequence order from a worker’s acknowledged cursor."><path fill="#384cfa" d="M116 151H233V198H116C80 198 48 174 46 147Z" />
+  <path fill="#171729" d="M232 151V198L220 207H110C73 207 42 181 36 150L47 144C55 178 82 191 112 191H223V151Z" />
+  <circle cx="98" cy="102" r="70" fill="#171729" />
+  <circle cx="98" cy="102" r="57" fill="#fff3d7" />
+  <circle cx="98" cy="102" r="48" fill="#171729" />
+  <g fill="#fff3d7">
+    <path d="M76 70Q91 58 110 66L103 82Q92 79 84 87Z" />
+    <path d="M131 83Q141 101 130 119L115 110Q120 101 114 92Z" />
+    <path d="M100 138Q78 139 67 121L83 111Q91 123 101 120Z" />
+  </g>
+  <circle cx="97" cy="102" r="10" fill="#ef543c" />
+  <path d="M135 159V188M171 159V188" fill="none" stroke="#fff3d7" stroke-width="4" stroke-dasharray="4 5" />
+  <path d="M205 143H218V198H205Z" fill="#ef543c" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/afterkey-tailstate-0.1.0/afterkey/companions/tailstate">Tailstate</a></h4>
+  <p>Page through changed keys after a worker reconnects.</p>
+  <div class="links"><a href="https://github.com/pgg898200-ship-it/streamsieve/blob/afterkey-tailstate-0.1.0/afterkey/companions/tailstate/examples/reconnect.py" aria-label="Tailstate — Example">Example</a><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/afterkey-tailstate-0.1.0/afterkey/companions/tailstate" aria-label="Tailstate source">Source</a></div>
+</li>
+<li class="entry" id="sincekit">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="SinceKit builds one changed-key array, and each reader takes the prefix needed for its checkpoint."><g transform="rotate(-12 128 128)">
+    <path d="M48 49H221V92H173V140H127V187H48L34 201V65Z" fill="#171729" />
+    <path d="M48 49H221V83H48ZM48 96H173V130H48ZM48 143H127V177H48Z" fill="#384cfa" />
+    <path d="M48 49H73V177H48Z" fill="#ef543c" />
+    <g fill="#fff3d7"><path d="M82 60H100V73H82ZM117 60H135V73H117ZM152 60H170V73H152ZM187 60H205V73H187ZM82 107H100V120H82ZM117 107H135V120H117ZM82 154H100V167H82Z" /></g>
+    <path d="M35 192H49V205H35Z" fill="#171729" />
+  </g>
+</svg></div>
+  <h4><a href="https://huggingface.co/spaces/pgg-engineering/sincekit/tree/main">SinceKit</a></h4>
+  <p>Prepare one changed-key array for readers at different revisions.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/sincekit" aria-label="SinceKit — Try it">Try it</a><a href="https://huggingface.co/spaces/pgg-engineering/sincekit/tree/main" aria-label="SinceKit source">Source</a></div>
+</li>
+<li class="entry" id="guardshift">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Guardshift reports which registered conditions switched on or off after a batch of signal changes."><path d="M35 195V80L69 46H135V62H77L53 86V180H100V198Z" fill="#171729" />
+  <path d="M143 37H220V80H196V59H143Z" fill="#384cfa" />
+  <path d="M157 175H198V152H220V199H157Z" fill="#171729" />
+  <path d="M74 137L175 64L189 82L89 155Z" fill="#ef543c" />
+  <path d="M87 150L166 173" fill="none" stroke="#384cfa" stroke-width="7" stroke-dasharray="8 7" />
+  <circle cx="79" cy="146" r="27" fill="#171729" /><circle cx="79" cy="146" r="10" fill="#fff3d7" />
+  <path d="M171 68L181 61L194 79L184 86Z" fill="#171729" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/chronosieve/tree/releases/guardshift/guardshift">Guardshift</a></h4>
+  <p>Find the conditions that turned on or off after a batch of updates.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/guardshift" aria-label="Guardshift — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/chronosieve/tree/releases/guardshift/guardshift" aria-label="Guardshift source">Source</a></div>
+</li>
+<li class="entry" id="kthwake">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="KthWake reports when a rolling arrival count crosses a rule’s threshold, including expiration during silence."><g transform="rotate(7 128 128)">
+    <path d="M55 35H201V52H193C189 81 166 105 141 128C163 150 191 176 193 204H201V222H55V204H63C65 175 93 149 115 128C91 104 67 82 63 52H55Z" fill="#171729" />
+    <path d="M78 53H179C174 75 158 95 128 120C101 98 83 77 78 53Z" fill="#fff3d7" />
+    <path d="M128 137C111 153 91 175 83 197H174C164 171 145 151 128 137Z" fill="#384cfa" />
+    <g fill="#ef543c"><circle cx="113" cy="72" r="10.7" /><circle cx="142" cy="72" r="10.7" /><circle cx="128" cy="94" r="10.7" /></g>
+    <path d="M128 142V164" stroke="#fff3d7" stroke-width="6" /><circle cx="128" cy="183" r="7" fill="#fff3d7" />
+    <path d="M55 35H201V41H55ZM55 204H201V211H55Z" fill="#ef543c" />
+  </g>
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/chronosieve/tree/releases/kthwake-0.1.0/companions/kthwake">KthWake</a></h4>
+  <p>Report when an event count crosses a threshold inside a sliding time window.</p>
+  <div class="links"><a href="https://pgg-kthwake.tancurl3.chatgpt.site/" aria-label="KthWake — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/chronosieve/tree/releases/kthwake-0.1.0/companions/kthwake" aria-label="KthWake source">Source</a></div>
+</li>
+<li class="entry" id="pulsefold">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Pulsefold tracks deadlines for readers that share a heartbeat but tolerate different amounts of silence."><path d="M57 38H193L210 56H43Z" fill="#171729" />
+  <path d="M122 62L47 143L57 153L131 74Z" fill="#384cfa" />
+  <path d="M122 66L99 187L113 190L135 68Z" fill="#171729" />
+  <path d="M126 68L181 208L196 204L139 63Z" fill="#ef543c" />
+  <path d="M48 121L67 140L51 165L30 143Z" fill="#384cfa" />
+  <path d="M105 164L125 186L104 212L84 189Z" fill="#171729" />
+  <path d="M184 177L214 204L194 231L169 204Z" fill="#ef543c" />
+  <g fill="#fff3d7"><circle cx="50" cy="143" r="5" /><circle cx="105" cy="188" r="6" /><circle cx="191" cy="205" r="7" /></g>
+  <circle cx="129" cy="63" r="22" fill="#171729" /><circle cx="129" cy="63" r="9" fill="#fff3d7" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/pulsefold-v0.1.0/pulsefold">Pulsefold</a></h4>
+  <p>Detect stale heartbeats for readers with different deadlines.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/pulsefold" aria-label="Pulsefold — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/pulsefold-v0.1.0/pulsefold" aria-label="Pulsefold source">Source</a></div>
+</li>
+<li class="entry" id="edgechime">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="EdgeChime reports which rectangular zones a moving point enters or leaves between position updates."><g transform="rotate(-9 128 128)">
+    <path d="M38 63H150V175H38Z" stroke="#171729" stroke-width="16" fill="none" />
+    <path d="M102 97H214V201H102Z" stroke="#384cfa" stroke-width="16" fill="none" />
+    <path d="M67 138L185 125" stroke="#fff3d7" stroke-width="19" fill="none" />
+    <path d="M67 138L185 125" stroke="#ef543c" stroke-width="8" fill="none" />
+    <circle cx="67" cy="138" r="11" fill="#fff3d7" stroke="#ef543c" stroke-width="5" />
+    <circle cx="185" cy="125" r="15" fill="#ef543c" />
+    <path d="M102 119V145M150 113V140" fill="none" stroke="#ef543c" stroke-width="6" />
+  </g>
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/edgechime">EdgeChime</a></h4>
+  <p>Find which rectangular zones a moving point just entered or left.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/edgechime" aria-label="EdgeChime — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/edgechime" aria-label="EdgeChime source">Source</a></div>
+</li></ul></section>
+<section class="group" aria-labelledby="group-backfold"><h3 id="group-backfold" tabindex="-1">Telemetry, time series and forecasts</h3><ul><li class="entry" id="backfold">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A replacement panel slots into a folded history while the surrounding readings stay in place.">
+  <path d="M26 79 89 54 154 83 226 58 226 176 155 207 88 177 26 203Z" fill="#171729" />
+  <path d="M34 85 86 64 86 169 34 190Z" fill="#fff3d7" />
+  <path d="M160 89 218 69 218 168 160 192Z" fill="#fff3d7" />
+  <path d="M91 65 151 91 151 193 91 166Z" fill="#384cfa" />
+  <path d="M100 88 139 105 M100 103 139 120 M100 118 125 130" fill="none" stroke="#fff3d7" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M44 119 74 107 M44 137 74 125 M44 155 64 147" fill="none" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M170 120 206 107 M170 138 206 125 M170 156 191 149" fill="none" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M85 52 101 28 163 55 148 79Z" fill="#ef543c" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M102 38 91 54 M117 44 106 60 M132 51 121 67" fill="none" stroke="#fff3d7" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M89 173 150 200 138 220 76 192Z" fill="#ef543c" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/backfold">Backfold</a></h4>
+  <p>Correct or retract a past event and update the online statistic.</p>
+  <div class="links"><a href="https://pgg898200-ship-it.github.io/backfold/" aria-label="Backfold — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/backfold" aria-label="Backfold source">Source</a></div>
+</li>
+<li class="entry" id="streamsieve">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Several telemetry channels pass through a sieve, and a marked strip carries the changed channel’s samples.">
+  <path d="M29 79 134 37 226 83 120 128Z" fill="#171729" />
+  <path d="M29 84 116 128 116 148 29 103Z" fill="#384cfa" />
+  <path d="M122 131 227 88 227 108 122 150Z" fill="#171729" />
+  <path d="M47 78 126 48 207 85 127 118Z" fill="#fff3d7" />
+  <path d="M62 81 143 50 M79 90 162 57 M97 99 180 64 M115 107 199 71" fill="none" stroke="#171729" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M49 112 58 116 58 151 49 157Z" fill="#171729" />
+  <path d="M75 126 84 130 84 163 75 171Z" fill="#171729" />
+  <path d="M172 131 183 126 183 160 172 166Z" fill="#171729" />
+  <path d="M203 118 213 114 213 148 203 155Z" fill="#171729" />
+  <path d="M112 84 130 77 151 87 132 95Z" fill="#ef543c" stroke="#171729" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M122 135 153 121 153 169 144 183 144 202 110 219 93 212 93 199 122 185Z" fill="#ef543c" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M104 203 132 190 M132 174 143 168" fill="none" stroke="#fff3d7" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/streamsieve">StreamSieve</a></h4>
+  <p>Sift numeric channels. Return a brief with handles for closer inspection.</p>
+  <div class="links"><a href="https://github.com/pgg898200-ship-it/streamsieve/blob/main/examples/jsonl_diurnal_sre.py" aria-label="StreamSieve — Example">Example</a><a href="https://github.com/pgg898200-ship-it/streamsieve" aria-label="StreamSieve source">Source</a></div>
+</li>
+<li class="entry" id="chronosieve">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A change rings a bell, representing the compact digest that can wake a monitoring agent.">
+  <path d="M45 178 C62 169 56 136 67 109 C76 86 93 72 116 68 L116 56 C116 43 138 43 138 56 L138 68 C171 73 191 98 198 135 C201 151 202 168 215 177 L215 187 L45 187Z" fill="#384cfa" stroke="#171729" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M73 152 C73 124 78 103 98 88" fill="none" stroke="#fff3d7" stroke-width="8" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M42 185 217 185 228 203 32 203Z" fill="#171729" />
+  <path d="M52 211 209 211 203 222 59 222Z" fill="#ef543c" />
+  <path d="M147 68 C156 53 167 44 179 42" fill="none" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="183" cy="42" r="11" fill="#ef543c" />
+  <path d="M63 61 44 49 M53 84 29 80 M175 74 196 61" fill="none" stroke="#ef543c" stroke-width="8" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M77 174 190 174" fill="none" stroke="#fff3d7" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="126" cy="56" r="4" fill="#fff3d7" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/chronosieve">ChronoSieve</a></h4>
+  <p>Detect a distribution shift and send a compact digest to a downstream reader.</p>
+  <div class="links"><a href="https://github.com/pgg898200-ship-it/chronosieve/blob/main/examples/alarm_escalation.py" aria-label="ChronoSieve — Example">Example</a><a href="https://github.com/pgg898200-ship-it/chronosieve" aria-label="ChronoSieve source">Source</a></div>
+</li>
+<li class="entry" id="causalsieve">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A marked upstream domino leads two later changes, illustrating how CausalSieve ranks incident candidates.">
+  <path d="M28 195 218 195 229 203 217 214 35 214 24 206Z" fill="#171729" />
+  <g transform="translate(153 185) rotate(43)"><path d="M-17 -97 13 -102 19 -96 19 0 -11 6 -17 0Z" fill="#384cfa" stroke="#171729" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" /><path d="M13 -98 13 -6 -11 0" fill="none" stroke="#171729" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" /><circle cx="-1" cy="-67" r="4.5" fill="#fff3d7" /><circle cx="-1" cy="-47" r="4.5" fill="#fff3d7" /><circle cx="-1" cy="-27" r="4.5" fill="#fff3d7" /></g>
+  <g transform="translate(109 185) rotate(26)"><path d="M-17 -97 13 -102 19 -96 19 0 -11 6 -17 0Z" fill="#384cfa" stroke="#171729" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" /><path d="M13 -98 13 -6 -11 0" fill="none" stroke="#171729" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" /><circle cx="-1" cy="-63" r="4.5" fill="#fff3d7" /><circle cx="-1" cy="-39" r="4.5" fill="#fff3d7" /></g>
+  <g transform="translate(63 185) rotate(10)"><path d="M-17 -97 13 -102 19 -96 19 0 -11 6 -17 0Z" fill="#ef543c" stroke="#171729" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" /><path d="M13 -98 13 -6 -11 0" fill="none" stroke="#171729" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" /><circle cx="-1" cy="-53" r="4.5" fill="#fff3d7" /></g>
+  <path d="M42 78 30 62 M57 71 55 51 M72 73 80 55" fill="none" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/causalsieve">CausalSieve</a></h4>
+  <p>Rank likely upstream contributors to a telemetry incident.</p>
+  <div class="links"><a href="https://pgg898200-ship-it.github.io/causalsieve/" aria-label="CausalSieve — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/causalsieve" aria-label="CausalSieve source">Source</a></div>
+</li>
+<li class="entry" id="flashmp">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Two impressions show the same subsequence shape at different levels and amplitudes.">
+  <path d="M33 44 151 31 159 117 42 131Z" fill="#171729" />
+  <path d="M43 53 142 42 148 107 50 119Z" fill="#384cfa" />
+  <path d="M52 91 69 89 77 65 94 98 105 78 122 81 139 78" fill="none" stroke="#fff3d7" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M77 146 212 124 228 205 91 228Z" fill="#171729" />
+  <path d="M89 154 204 135 216 197 99 216Z" fill="#ef543c" />
+  <path d="M98 188 116 185 126 155 147 197 157 173 177 177 201 172" fill="none" stroke="#fff3d7" stroke-width="8" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M174 50 202 47 207 75 M47 205 30 207 26 187" fill="none" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/flashmp">FlashMP</a></h4>
+  <p>Find recurring or unusual subsequences with an exact matrix profile.</p>
+  <div class="links"><a href="https://github.com/pgg898200-ship-it/flashmp/blob/main/examples/audit_tsfm_leakage.py" aria-label="FlashMP — Example">Example</a><a href="https://github.com/pgg898200-ship-it/flashmp" aria-label="FlashMP source">Source</a></div>
+</li>
+<li class="entry" id="tsjit">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="One incoming reading feeds a fan of nine forecast quantiles.">
+  <path d="M20 168 64 168 78 150 93 158 110 136" fill="none" stroke="#171729" stroke-width="10" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="25" cy="168" r="9" fill="#171729" />
+  <circle cx="65" cy="168" r="7" fill="#ef543c" />
+  <circle cx="92" cy="158" r="7" fill="#ef543c" />
+  <path d="M109 137 L148.8 33.4" fill="none" stroke="#384cfa" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="148.8" cy="33.4" r="4.5" fill="#384cfa" />
+  <path d="M109 137 L172.2 53.1" fill="none" stroke="#384cfa" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="172.2" cy="53.1" r="4.5" fill="#384cfa" />
+  <path d="M109 137 L191.7 72.4" fill="none" stroke="#384cfa" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="191.7" cy="72.4" r="4.5" fill="#384cfa" />
+  <path d="M109 137 L205.7 96.0" fill="none" stroke="#384cfa" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="205.7" cy="96.0" r="4.5" fill="#384cfa" />
+  <path d="M109 137 L213.0 122.4" fill="none" stroke="#ef543c" stroke-width="8" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="213.0" cy="122.4" r="6" fill="#ef543c" />
+  <path d="M109 137 L213.2 149.8" fill="none" stroke="#384cfa" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="213.2" cy="149.8" r="4.5" fill="#384cfa" />
+  <path d="M109 137 L206.4 176.3" fill="none" stroke="#384cfa" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="206.4" cy="176.3" r="4.5" fill="#384cfa" />
+  <path d="M109 137 L192.9 200.2" fill="none" stroke="#384cfa" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="192.9" cy="200.2" r="4.5" fill="#384cfa" />
+  <path d="M109 137 L175.8 225.6" fill="none" stroke="#384cfa" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <circle cx="175.8" cy="225.6" r="4.5" fill="#384cfa" />
+  <circle cx="109" cy="137" r="17" fill="#171729" />
+  <circle cx="109" cy="137" r="8" fill="#fff3d7" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/tsjit">tsjit</a></h4>
+  <p>Compile a forecasting model for a specified context and prediction horizon.</p>
+  <div class="links"><a href="https://github.com/pgg898200-ship-it/tsjit/blob/main/llms.txt" aria-label="tsjit — Agent guide">Agent guide</a><a href="https://github.com/pgg898200-ship-it/tsjit" aria-label="tsjit source">Source</a></div>
+</li>
+<li class="entry" id="recastcrps">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="One forecast bead moves while the other ensemble members and the observed outcome stay fixed.">
+  <path d="M36 51 216 51 224 59 224 196 214 206 33 206 26 198 26 63Z" fill="#171729" />
+  <path d="M39 67 211 67 211 189 39 189Z" fill="#fff3d7" />
+  <path d="M40 89 H209" fill="none" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M40 126 H209" fill="none" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M40 163 H209" fill="none" stroke="#171729" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+  <rect x="58" y="76" width="12" height="26" rx="5" fill="#384cfa" />
+  <rect x="75" y="76" width="12" height="26" rx="5" fill="#384cfa" />
+  <rect x="144" y="76" width="12" height="26" rx="5" fill="#384cfa" />
+  <rect x="160" y="76" width="12" height="26" rx="5" fill="#384cfa" />
+  <rect x="51" y="113" width="12" height="26" rx="5" fill="#384cfa" />
+  <rect x="62" y="150" width="12" height="26" rx="5" fill="#384cfa" />
+  <rect x="81" y="150" width="12" height="26" rx="5" fill="#384cfa" />
+  <rect x="171" y="150" width="12" height="26" rx="5" fill="#384cfa" />
+  <path d="M86 114 V137 M101 114 V137" fill="none" stroke="#171729" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />
+  <rect x="133" y="108" width="19" height="35" rx="6" fill="#ef543c" />
+  <path d="M134 39 145 25 155 39Z" fill="#ef543c" stroke="#171729" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+  <path d="M134 213 145 228 156 213Z" fill="#ef543c" stroke="#171729" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/integrations/recastcrps">RecastCRPS</a></h4>
+  <p>Update an ensemble forecast’s CRPS when a member prediction changes.</p>
+  <div class="links"><a href="https://huggingface.co/spaces/pgg-engineering/recastcrps" aria-label="RecastCRPS — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/streamsieve/tree/main/integrations/recastcrps" aria-label="RecastCRPS source">Source</a></div>
+</li></ul></section>
+<section class="group" aria-labelledby="group-cloture"><h3 id="group-cloture" tabindex="-1">Evaluation and sequential decisions</h3><ul><li class="entry" id="cloture">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A fan of rollout ballots shows repeated circular votes for the same answer.">
+<g transform="rotate(-22 129 184)">
+  <path d="M62 43 H148 V175 L133 191 H62 Z" fill="#384cfa" />
+  <polygon points="74,66 88,53 102,67 88,80" fill="#fff3d7" />
+</g>
+<g transform="rotate(-6 129 184)">
+  <path d="M78 33 H162 V180 L146 195 H78 Z" fill="#171729" />
+  <circle cx="97" cy="56" r="10" fill="#fff3d7" />
+</g>
+<g transform="rotate(11 129 184)">
+  <path d="M91 35 H172 V185 L158 201 H91 Z" fill="#ef543c" />
+  <circle cx="111" cy="60" r="12" fill="#fff3d7" />
+</g>
+<g transform="rotate(25 129 184)">
+  <path d="M108 42 H189 V188 L173 203 H108 Z" fill="#171729" />
+  <circle cx="148" cy="89" r="24" fill="#fff3d7" />
+  <circle cx="148" cy="89" r="12" fill="#ef543c" />
+  <path d="M122 138 H176 M122 154 H165" fill="none" stroke="#fff3d7" stroke-width="5" />
+</g>
+  <path d="M62 200 Q113 224 175 210 L171 225 Q111 239 58 214 Z" fill="#171729" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/cloture">Cloture</a></h4>
+  <p>Stop a fixed-budget vote when the remaining judges cannot change the winner.</p>
+  <div class="links"><a href="https://pgg898200-ship-it.github.io/cloture/playground.html" aria-label="Cloture — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/cloture" aria-label="Cloture source">Source</a></div>
+</li>
+<li class="entry" id="eproc">
+  <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="A sequence of evidence values rises and falls before crossing a stopping threshold.">
+  <path d="M27 95 H52 M65 95 H92 M105 95 H132 M145 95 H172 M185 95 H212 M224 95 H235" fill="none" stroke="#ef543c" stroke-width="7" />
+  <path d="M29 185 L66 153 L102 174 L141 122 L169 141 L206 65 L224 76" fill="none" stroke="#171729" stroke-width="9" stroke-linejoin="bevel" />
+  <path d="M29 202 V218 M66 171 V218 M102 190 V218 M141 141 V218 M169 159 V218 M206 86 V218" fill="none" stroke="#384cfa" stroke-width="5" />
+  <circle cx="29" cy="185" r="9" fill="#171729" />
+  <circle cx="66" cy="153" r="9" fill="#171729" />
+  <circle cx="102" cy="174" r="9" fill="#171729" />
+  <circle cx="141" cy="122" r="9" fill="#171729" />
+  <circle cx="169" cy="141" r="9" fill="#171729" />
+  <circle cx="206" cy="65" r="19" fill="#ef543c" />
+  <circle cx="206" cy="65" r="8" fill="#171729" />
+  <path d="M189 36 L186 30 M205 32 V23 M224 42 L230 36" fill="none" stroke="#171729" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+</svg></div>
+  <h4><a href="https://github.com/pgg898200-ship-it/eproc">eproc</a></h4>
+  <p>Track evidence as individual or paired evaluation scores arrive.</p>
+  <div class="links"><a href="https://pgg898200-ship-it.github.io/eproc/" aria-label="eproc — Try it">Try it</a><a href="https://github.com/pgg898200-ship-it/eproc" aria-label="eproc source">Source</a></div>
+</li></ul></section>
+</section></main><footer><span>PGG Engineering · 25 tools</span><a href="#top">Back to top ↑</a></footer>
+</div>
+<script>
+const controls = document.querySelector('.controls');
+const mark = document.getElementById('afterkey-mark');
+const readout = document.getElementById('readout');
+function setView(view) {
+  mark.dataset.view = view;
+  readout.textContent = view === 'reader' ? 'Reader gets 6 slots.' : 'Writes: 8 → 7 → 6 slots.';
+  for (const button of controls.querySelectorAll('button')) {
+    button.setAttribute('aria-pressed', String(button.dataset.view === view));
+  }
+}
+for (const button of controls.querySelectorAll('button')) {
+  button.addEventListener('click', () => setView(button.dataset.view));
+}
+setView('writes');
+controls.hidden = false;
+</script></body></html>
