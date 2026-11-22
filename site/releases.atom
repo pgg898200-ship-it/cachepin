@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom</id>
+  <title>PGG Engineering release notes</title>
+  <subtitle>Runnable examples and measured results from PGG Engineering.</subtitle>
+  <updated>2026-11-22T21:12:00Z</updated>
+  <author>
+    <name>PGG Engineering</name>
+    <uri>https://github.com/pgg898200-ship-it</uri>
+  </author>
+  <link rel="self" type="application/atom+xml" href="https://pgg898200-ship-it.github.io/cachepin/releases.atom"/>
+  <link rel="alternate" type="text/html" href="https://github.com/pgg898200-ship-it/streamsieve/blob/main/PRODUCTS.md"/>
+  <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>
+  <entry>
+    <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom#racecurve-shared-slots</id>
+    <title>Racecurve measures when a backup request makes the queue slower</title>
+    <updated>2026-11-22T21:12:00Z</updated>
+    <link rel="alternate" type="text/html" href="https://pgg898200-ship-it.github.io/cachepin/racecurve/"/>
+    <link rel="related" type="text/html" title="Executed notebook" href="https://github.com/pgg898200-ship-it/cachepin/blob/f93cc10e6770a7a839f5bb05d9de2c6a3a08fa99/experiments/shared-slots/hedging-under-load.ipynb"/>
+    <link rel="related" href="https://huggingface.co/datasets/pgg-engineering/racecurve-hedge-traces" title="Request traces"/>
+    <category term="request hedging"/>
+    <summary>Two replicas shared two worker slots. Sending a backup after 1.177 ms cut 6 ms deadline misses from 10.1% to 1.3% at 400 requests/s. At 1,600 requests/s, misses rose from 26.9% to 98.8%. Both copies ran to completion. The notebook lets you change the deadline and count misses across 36,800 measured requests from this host-local experiment.</summary>
+  </entry>
+  <entry>
+    <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom#rankpatch-langchain</id>
+    <title>RankPatch updates a search result as LangChain retrievers finish</title>
+    <updated>2026-11-22T21:12:00Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/pgg898200-ship-it/rankpatch/tree/31cdb543ba74b3b282ca7696902bdd910709dc00/integrations/langchain"/>
+    <link rel="related" href="https://huggingface.co/spaces/pgg-engineering/rankpatch" title="Interactive rank fusion"/>
+    <category term="hybrid search"/>
+    <summary>Run two local text searches in parallel and show the current top three after each update. A phrase reranker then revises the title ranking. In the six-document example, the query “prefix cache” gives Cache eviction six points in the final result, three from each source. The recipe runs without a model or API key.</summary>
+  </entry>
+  <entry>
+    <id>https://pgg898200-ship-it.github.io/cachepin/releases.atom#cachepin-prefix-diff</id>
+    <title>CachePin pinpoints where two requests stop sharing a prompt prefix</title>
+    <updated>2026-11-22T21:12:00Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/pgg898200-ship-it/cachepin/blob/adec42973f715c7c2bb935f32dfebdda8ce35e2b/README.md#try-a-pair-of-requests"/>
+    <link rel="related" href="https://pgg898200-ship-it.github.io/cachepin/#compare" title="Browser comparison"/>
+    <category term="prompt caching"/>
+    <summary>Two example requests contain the same runbook and tools, but the first tool name differs after 68 shared bytes. Sorting tools and JSON keys increases the second request’s modeled reusable prefix from zero to 1,099 estimated tokens. Run the CLI example on the checked-in pair, then try it on your own requests. Actual provider cache usage is a separate measurement.</summary>
+  </entry>
+</feed>
