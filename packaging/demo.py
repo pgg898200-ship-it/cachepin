@@ -27,10 +27,10 @@ def choose(pairs, slo, budget):
     # backup also misses. Nonpositive values already miss at delay zero.
     first_miss = sorted(slo - backup + 1 for primary, backup in pairs if primary > slo)
 
-    # Counts change only when a backup stops launching or starts missing.
+    # Between primary completions, launches stay fixed and misses can only
+    # increase. Only the earliest delay in each interval can win.
     delays = {0}
     delays.update(time for time in primary_times if time <= slo)
-    delays.update(time for time in first_miss if 0 < time <= slo)
 
     # Rank by misses, then launches, then earliest delay. Primary-only
     # starts with zero launches and sorts after any equal-scoring delay.
