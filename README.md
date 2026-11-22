@@ -6,7 +6,17 @@
 
 ## Try it
 
-With Python 3.10 or later in a virtual environment:
+Run the bundled trace with Python 3.10 or later. From a fresh checkout:
+
+```sh
+git clone --single-branch --branch racecurve https://github.com/pgg898200-ship-it/cachepin.git racecurve
+cd racecurve
+python3 packaging/demo.py examples/loopback.csv
+```
+
+On the first 700 requests, Racecurve selects a **1,177 µs** backup delay. Replaying the next 300 with that setting launches 42 backups and misses zero deadlines. Primary-only misses 27. The trace comes from a controlled localhost workload.
+
+To install the CLI in a virtual environment:
 
 ```sh
 python3 -m pip install https://huggingface.co/spaces/pgg-engineering/racecurve/resolve/main/racecurve_tools-0.1.0-py3-none-any.whl

@@ -15,6 +15,7 @@ tests/benchmark: tests/bench.cpp tests/reference.hpp src/racecurve.hpp
 test: racecurve tests/check
 	./tests/check
 	python3 tests/test_cli.py
+	python3 tests/test_selector.py
 	python3 -m unittest -q test_bounds
 	python3 -m unittest discover -s integrations -q
 

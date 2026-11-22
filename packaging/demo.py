@@ -1,11 +1,11 @@
 """Choose a hedge delay on a calibration split, then report held-out results."""
 import argparse
 from bisect import bisect_right
+from collections import Counter
 import csv
 from importlib import resources
 import json
 from pathlib import Path
-import sys
 
 
 def read_trace(stream):
@@ -23,19 +23,27 @@ def read_trace(stream):
 
 
 def choose(pairs, slo, budget):
-    # For integer delay d, a backup fires iff P > d. A request that misses
-    # primary-only is rescued iff d <= slo-B. Objective changes only at a P
-    # or at a rescue cutoff + 1; selected ties prefer fewer launches then d.
-    primary = sorted(p for p, b in pairs)
-    cutoffs = sorted(slo - b + 1 for p, b in pairs if p > slo)
-    primary_misses = len(cutoffs)
-    optimum = (primary_misses, 0, slo + 1)
-    for delay in sorted({0, *(p for p in primary if p <= slo),
-                         *(c for c in cutoffs if 0 < c <= slo)}):
-        launches = len(pairs) - bisect_right(primary, delay)
+    """Minimize misses, then launches, then delay under the launch budget."""
+    # Between primary completions the launch count stays fixed, and waiting
+    # longer can only lose rescues. The earliest delay in each interval wins.
+    completions = Counter({0: 0})
+    miss_starts = []
+    for primary, backup in pairs:
+        if primary <= slo:
+            completions[primary] += 1
+        else:
+            # The primary already misses. Its backup also misses from this delay on.
+            miss_starts.append(slo - backup + 1)
+
+    miss_starts.sort()
+    best = (len(miss_starts), 0, slo + 1)  # Backups off.
+    launches = len(pairs)
+    for delay, finished in sorted(completions.items()):
+        launches -= finished
         if 100 * launches <= budget * len(pairs):
-            optimum = min(optimum, (bisect_right(cutoffs, delay), launches, delay))
-    return None if optimum[2] > slo else optimum[2]
+            misses = bisect_right(miss_starts, delay)
+            best = min(best, (misses, launches, delay))
+    return None if best[2] > slo else best[2]
 
 
 def counts(pairs, slo, delay):
