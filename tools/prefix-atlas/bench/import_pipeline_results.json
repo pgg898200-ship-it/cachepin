@@ -1,0 +1,61 @@
+{
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "machine": "x86_64",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "warmups": 1,
+  "trials": 5,
+  "results": [
+    {
+      "input": "mooncake-fast25-toolagent.jsonl",
+      "block_size": 512,
+      "capacities": "0,1,64,1024,8192,65536,1048576",
+      "output_sha256": "1ba9d49c572896011e4d8249610c55a721da615b983bd33345c88ecbc38f6456",
+      "samples_ms": {
+        "weighted": [
+          273.666,
+          276.421,
+          307.576,
+          178.729,
+          253.868
+        ],
+        "expanded": [
+          255.395,
+          449.945,
+          342.313,
+          182.434,
+          239.886
+        ]
+      },
+      "median_elapsed_ms": {
+        "weighted": 273.666,
+        "expanded": 255.395
+      }
+    },
+    {
+      "input": "harvard-may17-requests.jsonl",
+      "block_size": 16,
+      "capacities": "0,1,64,1024,8192,65536,1048576",
+      "output_sha256": "71556418c88ff6d4f3682cd92b269e271268253a137ecc2d91620fe4fb07cc8e",
+      "samples_ms": {
+        "weighted": [
+          615.704,
+          606.954,
+          992.668,
+          745.912,
+          544.639
+        ],
+        "expanded": [
+          657.015,
+          592.145,
+          636.615,
+          818.443,
+          688.401
+        ]
+      },
+      "median_elapsed_ms": {
+        "weighted": 615.704,
+        "expanded": 657.015
+      }
+    }
+  ]
+}

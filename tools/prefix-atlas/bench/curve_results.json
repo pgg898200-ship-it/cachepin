@@ -1,0 +1,168 @@
+{
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "arch": "x86_64",
+  "compiler": "c++ (Debian 14.2.0-19) 14.2.0",
+  "flags": [
+    "-O3",
+    "-DNDEBUG",
+    "-march=native",
+    "-std=c++17"
+  ],
+  "warmups": 1,
+  "samples": 9,
+  "results": [
+    {
+      "name": "mooncake-toolagent-complete-pages",
+      "nodes": 16690,
+      "requests": 23608,
+      "page_accesses": 386041,
+      "cold": 159983,
+      "input_sha256": "25701c169848ffe522d46be02f89ad1dbce8f0b3ab29b75adb9797257c3b34ec",
+      "histogram_sha256": "aa6930b15b457fe455337c9d378fac058e145ac037d83bf5a05ea5ebad91882d",
+      "milliseconds": {
+        "curve": [
+          45.283991,
+          29.904636,
+          37.475212,
+          30.029231,
+          34.93134,
+          39.108815,
+          52.593231,
+          31.203652,
+          30.338349
+        ],
+        "expanded": [
+          28.462437,
+          26.053605,
+          38.933064,
+          40.794073,
+          27.402556,
+          28.703404,
+          28.327137,
+          28.597868,
+          45.673665
+        ]
+      },
+      "median_ms": {
+        "curve": 34.93134,
+        "expanded": 28.597868
+      },
+      "speedup": 0.8186879747527578
+    },
+    {
+      "name": "harvard-may17-full-16-token-blocks",
+      "nodes": 1478,
+      "requests": 1375,
+      "page_accesses": 5684383,
+      "cold": 655155,
+      "input_sha256": "df36295f8d86284161f3a95f971e0127bee93be5ac26fb0c0bab2d2f75311772",
+      "histogram_sha256": "e12f9f1dbfec0f0afef85b6759c0bec55b38b398b963f53ca24f7c3459f9308a",
+      "milliseconds": {
+        "curve": [
+          19.106283,
+          5.791307,
+          5.801472,
+          9.394321,
+          6.463125,
+          7.590776,
+          6.85126,
+          25.715284,
+          3.516646
+        ],
+        "expanded": [
+          307.063921,
+          348.932613,
+          304.843354,
+          232.276238,
+          199.589842,
+          224.166568,
+          225.613278,
+          235.242162,
+          239.444022
+        ]
+      },
+      "median_ms": {
+        "curve": 6.85126,
+        "expanded": 235.242162
+      },
+      "speedup": 34.33560571340163
+    },
+    {
+      "name": "shared-1024",
+      "nodes": 129,
+      "requests": 20000,
+      "page_accesses": 20560000,
+      "cold": 1536,
+      "input_sha256": "f33ee1625c531faec787c9bdacee1784c4278c15283bcd2050e0a3bb41e43291",
+      "histogram_sha256": "d7d7f7857b62822b255fb390143322150acc42a979482ae9e6dedcd223ad9cc6",
+      "milliseconds": {
+        "curve": [
+          13.967583,
+          18.422617,
+          13.309159,
+          11.60151,
+          10.24464,
+          11.102175,
+          19.106877,
+          7.997522,
+          8.337576
+        ],
+        "expanded": [
+          1636.434844,
+          1610.994674,
+          1571.230506,
+          1307.367258,
+          1358.260747,
+          1303.982338,
+          1303.609079,
+          1156.427384,
+          1269.912031
+        ]
+      },
+      "median_ms": {
+        "curve": 11.60151,
+        "expanded": 1307.367258
+      },
+      "speedup": 112.68940491367073
+    },
+    {
+      "name": "shallow-cycle",
+      "nodes": 4096,
+      "requests": 200000,
+      "page_accesses": 200000,
+      "cold": 4096,
+      "input_sha256": "ccf8d32d84d4adb8dee62a5924f233d18e56af987c116c55f4e3c183e625e42e",
+      "histogram_sha256": "1f4bddc42f184ec6896f91f14c9f13424c6d887bfa7cf5be382a20752adba6e2",
+      "milliseconds": {
+        "curve": [
+          34.708808,
+          68.005244,
+          43.42506,
+          59.870295,
+          37.768774,
+          56.020373,
+          72.661778,
+          69.431445,
+          50.591743
+        ],
+        "expanded": [
+          31.817205,
+          27.351886,
+          37.574316,
+          47.581916,
+          50.05542,
+          27.68534,
+          27.838458,
+          39.863325,
+          31.086713
+        ]
+      },
+      "median_ms": {
+        "curve": 56.020373,
+        "expanded": 31.817205
+      },
+      "speedup": 0.5679577499421505
+    }
+  ],
+  "cpu": "AMD EPYC 9V74 80-Core Processor"
+}

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=74"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prefix-atlas"
+version = "0.1.0"
+description = "Exact atomic prefix-cache capacity curves from shared LLM request histories"
+requires-python = ">=3.9"
+readme = "README-curve.md"
+dependencies = []
+
+[project.urls]
+Source = "https://github.com/pgg898200-ship-it/cachepin/tree/main/tools/prefix-atlas"
+
+[project.scripts]
+prefix-atlas = "prefix_atlas.cli:main"
+
+[tool.setuptools]
+packages = ["prefix_atlas"]

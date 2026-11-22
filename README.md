@@ -17,6 +17,8 @@
 
 Interactive browser playground & swarm billing simulator: **[pgg898200-ship-it.github.io/cachepin](https://pgg898200-ship-it.github.io/cachepin/)**
 
+**[Prefix Atlas](tools/prefix-atlas/)** calculates the cache budget needed for a target prefix hit rate. [Try the capacity calculator](https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/) on two public agent traces or import your own curve.
+
 ---
 
 ## Why Multi-Agent Prompt Caches Collapse

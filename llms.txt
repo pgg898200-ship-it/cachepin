@@ -36,3 +36,7 @@
 - [server.json](server.json) & [mcpb/manifest.json](mcpb/manifest.json): Official Model Context Protocol (MCP) Registry manifest (`io.github.pgg898200-ship-it/cachepin`) and universal cross-platform `.mcpb` Desktop Extension.
 - [Dockerfile](Dockerfile), [Formula/cachepin.rb](Formula/cachepin.rb), [flake.nix](flake.nix): Multi-arch GHCR OCI image, Homebrew tap formula, and Nix Flake.
 - [.claude-plugin/plugin.json](.claude-plugin/plugin.json) & [skills/cachepin/SKILL.md](skills/cachepin/SKILL.md): Native Claude Code plugin and skill package.
+
+## Offline prefix-cache sizing
+
+[Prefix Atlas](https://github.com/pgg898200-ship-it/cachepin/tree/main/tools/prefix-atlas) calculates exact serial LRU prefix-hit curves from agent trace histories. The source includes the compact tree format, a tested GuideLLM replay exporter, public benchmark inputs and results for short and long traces. [Interactive cache budget calculator](https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/).
