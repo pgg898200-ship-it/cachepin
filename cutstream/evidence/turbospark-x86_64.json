@@ -1,0 +1,291 @@
+{
+  "environment": {
+    "upstream": "https://raw.githubusercontent.com/whit3rabbit/turbospark/5ede725e9a1e375fb66d135bc0ab6117bf2a5259/crates/tokenizer/src/stop_matcher.rs",
+    "source_sha256": "e70844fdf4a52854f921061271b8b0687a53ee8c25b76ab3306bc567001ced98",
+    "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+    "runner": "GitHub Actions 1000000288",
+    "revision": "1b0166a62317cedcb2a66e1920f7b2e6ccc49b3d",
+    "cxx": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+    "cpu": "AMD EPYC 7763 64-Core Processor"
+  },
+  "results": [
+    {
+      "stops": 1,
+      "chunk_bytes": 4,
+      "input_bytes": 38400,
+      "chunks": 9616,
+      "output_bytes": 38288,
+      "frame_digest": "5cd17a786a3da604",
+      "median_input_MiB_per_s": {
+        "cutstream": 158.94254924064165,
+        "turbospark": 11.826739803455489
+      },
+      "median_time_ratio_turbospark_over_cutstream": 13.439253072448796,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100058964,
+            "passes": 454,
+            "ns_per_pass": 220394.19383259912
+          },
+          {
+            "elapsed_ns": 100225999,
+            "passes": 435,
+            "ns_per_pass": 230404.59540229884
+          },
+          {
+            "elapsed_ns": 100163116,
+            "passes": 427,
+            "ns_per_pass": 234574.04215456673
+          },
+          {
+            "elapsed_ns": 100082386,
+            "passes": 426,
+            "ns_per_pass": 234935.17840375588
+          },
+          {
+            "elapsed_ns": 100193500,
+            "passes": 435,
+            "ns_per_pass": 230329.88505747126
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 102131527,
+            "passes": 33,
+            "ns_per_pass": 3094894.757575758
+          },
+          {
+            "elapsed_ns": 102183367,
+            "passes": 33,
+            "ns_per_pass": 3096465.6666666665
+          },
+          {
+            "elapsed_ns": 101147815,
+            "passes": 32,
+            "ns_per_pass": 3160869.21875
+          },
+          {
+            "elapsed_ns": 102128577,
+            "passes": 33,
+            "ns_per_pass": 3094805.3636363638
+          },
+          {
+            "elapsed_ns": 101361085,
+            "passes": 32,
+            "ns_per_pass": 3167533.90625
+          }
+        ]
+      }
+    },
+    {
+      "stops": 1,
+      "chunk_bytes": 32,
+      "input_bytes": 38624,
+      "chunks": 1228,
+      "output_bytes": 38512,
+      "frame_digest": "8aa474b0ad33461c",
+      "median_input_MiB_per_s": {
+        "cutstream": 438.19105957747627,
+        "turbospark": 33.80574855084579
+      },
+      "median_time_ratio_turbospark_over_cutstream": 12.962028008887652,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100080530,
+            "passes": 1191,
+            "ns_per_pass": 84030.67170445004
+          },
+          {
+            "elapsed_ns": 100051997,
+            "passes": 1189,
+            "ns_per_pass": 84148.02102607233
+          },
+          {
+            "elapsed_ns": 100032422,
+            "passes": 1190,
+            "ns_per_pass": 84060.85882352942
+          },
+          {
+            "elapsed_ns": 100077092,
+            "passes": 1192,
+            "ns_per_pass": 83957.29194630873
+          },
+          {
+            "elapsed_ns": 100072065,
+            "passes": 1187,
+            "ns_per_pass": 84306.7101937658
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 100388021,
+            "passes": 92,
+            "ns_per_pass": 1091174.141304348
+          },
+          {
+            "elapsed_ns": 100840100,
+            "passes": 93,
+            "ns_per_pass": 1084302.1505376345
+          },
+          {
+            "elapsed_ns": 100243127,
+            "passes": 92,
+            "ns_per_pass": 1089599.206521739
+          },
+          {
+            "elapsed_ns": 100574212,
+            "passes": 92,
+            "ns_per_pass": 1093197.956521739
+          },
+          {
+            "elapsed_ns": 100078242,
+            "passes": 92,
+            "ns_per_pass": 1087806.9782608696
+          }
+        ]
+      }
+    },
+    {
+      "stops": 4,
+      "chunk_bytes": 4,
+      "input_bytes": 38428,
+      "chunks": 9620,
+      "output_bytes": 38288,
+      "frame_digest": "060b645f1285ac32",
+      "median_input_MiB_per_s": {
+        "cutstream": 169.3755656677452,
+        "turbospark": 3.2031947136091086
+      },
+      "median_time_ratio_turbospark_over_cutstream": 52.877074549397626,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100151098,
+            "passes": 460,
+            "ns_per_pass": 217719.77826086956
+          },
+          {
+            "elapsed_ns": 100097916,
+            "passes": 492,
+            "ns_per_pass": 203451.0487804878
+          },
+          {
+            "elapsed_ns": 100179325,
+            "passes": 463,
+            "ns_per_pass": 216370.0323974082
+          },
+          {
+            "elapsed_ns": 100021792,
+            "passes": 484,
+            "ns_per_pass": 206656.59504132232
+          },
+          {
+            "elapsed_ns": 100121846,
+            "passes": 441,
+            "ns_per_pass": 227033.66439909296
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 102697753,
+            "passes": 9,
+            "ns_per_pass": 11410861.444444444
+          },
+          {
+            "elapsed_ns": 103652396,
+            "passes": 9,
+            "ns_per_pass": 11516932.888888888
+          },
+          {
+            "elapsed_ns": 102766201,
+            "passes": 9,
+            "ns_per_pass": 11418466.777777778
+          },
+          {
+            "elapsed_ns": 102969129,
+            "passes": 9,
+            "ns_per_pass": 11441014.333333334
+          },
+          {
+            "elapsed_ns": 103080186,
+            "passes": 9,
+            "ns_per_pass": 11453354
+          }
+        ]
+      }
+    },
+    {
+      "stops": 4,
+      "chunk_bytes": 32,
+      "input_bytes": 38652,
+      "chunks": 1228,
+      "output_bytes": 38512,
+      "frame_digest": "98fd58f2c5cbc29a",
+      "median_input_MiB_per_s": {
+        "cutstream": 362.75883823698985,
+        "turbospark": 6.876707967777796
+      },
+      "median_time_ratio_turbospark_over_cutstream": 52.751816703104105,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100029726,
+            "passes": 988,
+            "ns_per_pass": 101244.66194331984
+          },
+          {
+            "elapsed_ns": 100075967,
+            "passes": 988,
+            "ns_per_pass": 101291.46457489878
+          },
+          {
+            "elapsed_ns": 100009051,
+            "passes": 983,
+            "ns_per_pass": 101738.60732451678
+          },
+          {
+            "elapsed_ns": 100060806,
+            "passes": 972,
+            "ns_per_pass": 102943.21604938271
+          },
+          {
+            "elapsed_ns": 100089907,
+            "passes": 985,
+            "ns_per_pass": 101614.11878172589
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 101719793,
+            "passes": 19,
+            "ns_per_pass": 5353673.315789473
+          },
+          {
+            "elapsed_ns": 102158888,
+            "passes": 19,
+            "ns_per_pass": 5376783.578947368
+          },
+          {
+            "elapsed_ns": 101456952,
+            "passes": 19,
+            "ns_per_pass": 5339839.578947368
+          },
+          {
+            "elapsed_ns": 101846258,
+            "passes": 19,
+            "ns_per_pass": 5360329.368421053
+          },
+          {
+            "elapsed_ns": 102244448,
+            "passes": 19,
+            "ns_per_pass": 5381286.736842105
+          }
+        ]
+      }
+    }
+  ],
+  "workflow_job": "https://github.com/pgg898200-ship-it/cachepin/actions/runs/45066460621/job/137343603346"
+}

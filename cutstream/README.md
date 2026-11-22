@@ -19,13 +19,15 @@ A public GitHub Actions run compiled Cutstream and TurboSpark v0.7.1's original 
 
 These are medians of five alternating samples on 32 interleaved synthetic ASCII streams. Dictionary construction was excluded from both timings. TurboSpark also handles Unicode text, and competing matches can follow different policies. The workloads ensure the two policies agree. [Public run](https://github.com/pgg898200-ship-it/cachepin/actions/runs/45065919328) · [Raw samples](evidence/turbospark-ci.json) · [Reproduction](compare/turbospark/README.md)
 
+A second CI run repeated the same four fixtures on an AMD EPYC 7763 and an ARM64 hosted runner. Cutstream's throughput ratio ranged from **13.0× to 52.9× on AMD** and **14.8× to 64.0× on ARM64**. Both architectures also ran the native differential suite and the CPython tests. [Two-architecture CI run](https://github.com/pgg898200-ship-it/cachepin/actions/runs/45066460621) · [AMD samples](evidence/turbospark-x86_64.json) · [ARM64 samples](evidence/turbospark-arm64.json)
+
 **Where it pays off.** On a separate AMD EPYC 9V74, an owned-output replay of 300 recorded SDK deltas across 512 streams took 20.41 CPU ns/feed against 48.39 for llama.cpp's pinned stop-search functions in a bounded-buffer adapter. A native 32-marker near-miss workload with 4,096 interleaved streams took 8.85 CPU ns/feed against 132.43 for a grouped prefix rescanner with equivalent release timing. The results cover host-side matching and emission. [llama.cpp replay](compare/llamacpp.py) · [Raw samples](evidence/llamacpp.csv) · [Native benchmark](bench/README.md)
 
 **Where it loses.** With four stops and 256-byte chunks, fixed-window search took 39.06 CPU ns/feed against Cutstream's 92.77, at the cost of later release. Compiling a fresh one-stop plan for a 64-byte response delivered in one chunk took 1.36 µs in Cutstream against 1.05 µs in vLLM's Python routines. For four-byte chunks with four reusable markers, the same vLLM comparison took 880 ns/feed against Cutstream's 110. [Native samples](bench/results.csv) · [Pinned vLLM routines, cold and warm results](compare/README.md)
 
 ## Install
 
-For C++17, copy [cutstream.hpp](include/cutstream.hpp) into your include path. For Python 3.10+ with a C++17 compiler, install from the public source branch.
+For C++17, copy [cutstream.hpp](include/cutstream.hpp) into your include path. For Python 3.10+ with a C++17 compiler, install the [verified source package](https://pgg-cutstream.tancurl3.chatgpt.site/pgg_cutstream-0.1.0.tar.gz) or install from the public source branch. The source package SHA-256 is `0821b30d237a92cf5130f88c511b657fd1e576c8af4eca471c5106d586889f90`.
 
 ```sh
 python -m pip install 'pgg-cutstream @ git+https://github.com/pgg898200-ship-it/cachepin.git@cutstream-v0.1#subdirectory=cutstream'
@@ -80,6 +82,8 @@ vLLM's detokenizer has an output holdback and supports token-aware behaviors inc
 
 ## Reproduce
 
+The [language-neutral conformance vectors](evidence/conformance.jsonl) specify expected visible bytes, pending bytes, consumed count and selected marker after each feed. Each line is a complete independent case. [Verifier and format](examples/verify_conformance.py)
+
 From this directory, run the native differential suite and the Python integration tests.
 
 ```sh
@@ -87,6 +91,7 @@ c++ -std=c++17 -O3 -Wall -Wextra -Iinclude tests/test.cpp -o /tmp/cutstream-test
 /tmp/cutstream-test
 python -m pip install .
 python -m unittest discover -s tests -p 'test_python.py'
+python examples/verify_conformance.py
 python examples/replay_sdk.py
 ```
 

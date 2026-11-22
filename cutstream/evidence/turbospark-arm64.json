@@ -1,0 +1,291 @@
+{
+  "environment": {
+    "upstream": "https://raw.githubusercontent.com/whit3rabbit/turbospark/5ede725e9a1e375fb66d135bc0ab6117bf2a5259/crates/tokenizer/src/stop_matcher.rs",
+    "source_sha256": "e70844fdf4a52854f921061271b8b0687a53ee8c25b76ab3306bc567001ced98",
+    "platform": "Linux-7.0.0-1017-azure-aarch64-with-glibc2.39",
+    "runner": "GitHub Actions 1000000287",
+    "revision": "1b0166a62317cedcb2a66e1920f7b2e6ccc49b3d",
+    "cxx": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+    "cpu": "aarch64"
+  },
+  "results": [
+    {
+      "stops": 1,
+      "chunk_bytes": 4,
+      "input_bytes": 38400,
+      "chunks": 9616,
+      "output_bytes": 38288,
+      "frame_digest": "5cd17a786a3da604",
+      "median_input_MiB_per_s": {
+        "cutstream": 237.4695408896934,
+        "turbospark": 13.31306484562144
+      },
+      "median_time_ratio_turbospark_over_cutstream": 17.83733074565435,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100065145,
+            "passes": 649,
+            "ns_per_pass": 154183.58243451462
+          },
+          {
+            "elapsed_ns": 100019728,
+            "passes": 650,
+            "ns_per_pass": 153876.50461538462
+          },
+          {
+            "elapsed_ns": 100084793,
+            "passes": 649,
+            "ns_per_pass": 154213.8567026194
+          },
+          {
+            "elapsed_ns": 100017512,
+            "passes": 644,
+            "ns_per_pass": 155306.69565217392
+          },
+          {
+            "elapsed_ns": 100086800,
+            "passes": 645,
+            "ns_per_pass": 155173.33333333334
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 101778252,
+            "passes": 37,
+            "ns_per_pass": 2750763.5675675673
+          },
+          {
+            "elapsed_ns": 101556033,
+            "passes": 37,
+            "ns_per_pass": 2744757.6486486485
+          },
+          {
+            "elapsed_ns": 100972683,
+            "passes": 36,
+            "ns_per_pass": 2804796.75
+          },
+          {
+            "elapsed_ns": 100339234,
+            "passes": 36,
+            "ns_per_pass": 2787200.9444444445
+          },
+          {
+            "elapsed_ns": 101583276,
+            "passes": 37,
+            "ns_per_pass": 2745493.945945946
+          }
+        ]
+      }
+    },
+    {
+      "stops": 1,
+      "chunk_bytes": 32,
+      "input_bytes": 38624,
+      "chunks": 1228,
+      "output_bytes": 38512,
+      "frame_digest": "8aa474b0ad33461c",
+      "median_input_MiB_per_s": {
+        "cutstream": 534.2076925443854,
+        "turbospark": 36.21120807542692
+      },
+      "median_time_ratio_turbospark_over_cutstream": 14.752550962443618,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100061590,
+            "passes": 1462,
+            "ns_per_pass": 68441.58002735979
+          },
+          {
+            "elapsed_ns": 100027435,
+            "passes": 1450,
+            "ns_per_pass": 68984.43793103448
+          },
+          {
+            "elapsed_ns": 100051853,
+            "passes": 1460,
+            "ns_per_pass": 68528.66643835616
+          },
+          {
+            "elapsed_ns": 100009007,
+            "passes": 1437,
+            "ns_per_pass": 69595.69032707029
+          },
+          {
+            "elapsed_ns": 100049428,
+            "passes": 1451,
+            "ns_per_pass": 68952.05237767057
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 100742133,
+            "passes": 99,
+            "ns_per_pass": 1017597.303030303
+          },
+          {
+            "elapsed_ns": 100734401,
+            "passes": 99,
+            "ns_per_pass": 1017519.2020202021
+          },
+          {
+            "elapsed_ns": 100634832,
+            "passes": 99,
+            "ns_per_pass": 1016513.4545454546
+          },
+          {
+            "elapsed_ns": 100704648,
+            "passes": 99,
+            "ns_per_pass": 1017218.6666666666
+          },
+          {
+            "elapsed_ns": 100636308,
+            "passes": 99,
+            "ns_per_pass": 1016528.3636363636
+          }
+        ]
+      }
+    },
+    {
+      "stops": 4,
+      "chunk_bytes": 4,
+      "input_bytes": 38428,
+      "chunks": 9620,
+      "output_bytes": 38288,
+      "frame_digest": "060b645f1285ac32",
+      "median_input_MiB_per_s": {
+        "cutstream": 241.0690167626749,
+        "turbospark": 3.765445845406196
+      },
+      "median_time_ratio_turbospark_over_cutstream": 64.02137400456219,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100136816,
+            "passes": 663,
+            "ns_per_pass": 151035.92156862744
+          },
+          {
+            "elapsed_ns": 100116432,
+            "passes": 655,
+            "ns_per_pass": 152849.51450381678
+          },
+          {
+            "elapsed_ns": 100095695,
+            "passes": 661,
+            "ns_per_pass": 151430.7034795764
+          },
+          {
+            "elapsed_ns": 100030483,
+            "passes": 658,
+            "ns_per_pass": 152022.01063829788
+          },
+          {
+            "elapsed_ns": 100019244,
+            "passes": 654,
+            "ns_per_pass": 152934.623853211
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 107119754,
+            "passes": 11,
+            "ns_per_pass": 9738159.454545455
+          },
+          {
+            "elapsed_ns": 106855434,
+            "passes": 11,
+            "ns_per_pass": 9714130.363636363
+          },
+          {
+            "elapsed_ns": 106983990,
+            "passes": 11,
+            "ns_per_pass": 9725817.272727273
+          },
+          {
+            "elapsed_ns": 107059238,
+            "passes": 11,
+            "ns_per_pass": 9732658
+          },
+          {
+            "elapsed_ns": 107094337,
+            "passes": 11,
+            "ns_per_pass": 9735848.818181818
+          }
+        ]
+      }
+    },
+    {
+      "stops": 4,
+      "chunk_bytes": 32,
+      "input_bytes": 38652,
+      "chunks": 1228,
+      "output_bytes": 38512,
+      "frame_digest": "98fd58f2c5cbc29a",
+      "median_input_MiB_per_s": {
+        "cutstream": 472.51094682834724,
+        "turbospark": 7.402669072023121
+      },
+      "median_time_ratio_turbospark_over_cutstream": 63.82980817204243,
+      "samples": {
+        "cutstream": [
+          {
+            "elapsed_ns": 100019141,
+            "passes": 1286,
+            "ns_per_pass": 77775.38180404354
+          },
+          {
+            "elapsed_ns": 100011101,
+            "passes": 1282,
+            "ns_per_pass": 78011.77925117005
+          },
+          {
+            "elapsed_ns": 100075927,
+            "passes": 1287,
+            "ns_per_pass": 77759.07303807304
+          },
+          {
+            "elapsed_ns": 100059095,
+            "passes": 1282,
+            "ns_per_pass": 78049.21606864275
+          },
+          {
+            "elapsed_ns": 100063148,
+            "passes": 1280,
+            "ns_per_pass": 78174.334375
+          }
+        ],
+        "turbospark": [
+          {
+            "elapsed_ns": 102942145,
+            "passes": 17,
+            "ns_per_pass": 6055420.294117647
+          },
+          {
+            "elapsed_ns": 104569015,
+            "passes": 21,
+            "ns_per_pass": 4979476.904761905
+          },
+          {
+            "elapsed_ns": 104397484,
+            "passes": 21,
+            "ns_per_pass": 4971308.761904762
+          },
+          {
+            "elapsed_ns": 104487364,
+            "passes": 21,
+            "ns_per_pass": 4975588.761904762
+          },
+          {
+            "elapsed_ns": 104912722,
+            "passes": 21,
+            "ns_per_pass": 4995843.904761905
+          }
+        ]
+      }
+    }
+  ],
+  "workflow_job": "https://github.com/pgg898200-ship-it/cachepin/actions/runs/45066460621/job/137343602948"
+}
