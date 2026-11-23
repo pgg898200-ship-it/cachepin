@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from moss import pairs_from, wall_us
+from moss import STEP, pairs_from, primary_percentile_index, wall_us
 
 
 class SourceTests(unittest.TestCase):
@@ -20,6 +20,11 @@ class SourceTests(unittest.TestCase):
         for state, valid in [("SUBMIT_FAILED", False), ("COMPLETED", False), ("CANCELLED", True)]:
             with self.assertRaises(ValueError):
                 wall_us({"state": state, "valid": valid, "wall_s": 1})
+
+    def test_primary_percentiles_preserve_ties_and_round_up_to_grid(self):
+        calibration = [(4 * STEP + 1, 0), (0, 3), (STEP, 0), (STEP, 999)]
+        self.assertEqual(primary_percentile_index(calibration, 75), 1)
+        self.assertEqual(primary_percentile_index(calibration, 95), 5)
 
     def test_detects_round_gap(self):
         with self.assertRaises(ValueError):

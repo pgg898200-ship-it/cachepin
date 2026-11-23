@@ -25,6 +25,22 @@
       "p95_nearest_rank_us": 107130000,
       "mean_us": 26512777.78
     },
+    "primary_p75": {
+      "delay_us": 116100000,
+      "requests": 18,
+      "misses": 7,
+      "launches": 4,
+      "p95_nearest_rank_us": 121700000,
+      "mean_us": 48031111.11
+    },
+    "primary_p95": {
+      "delay_us": 121700000,
+      "requests": 18,
+      "misses": 7,
+      "launches": 0,
+      "p95_nearest_rank_us": 121700000,
+      "mean_us": 48031111.11
+    },
     "calibrated": {
       "delay_us": 121700000,
       "requests": 18,
@@ -50,6 +66,22 @@
       "launches": 11,
       "p95_nearest_rank_us": 52180000,
       "mean_us": 18320833.33
+    },
+    "primary_p75": {
+      "delay_us": 116100000,
+      "requests": 36,
+      "misses": 11,
+      "launches": 4,
+      "p95_nearest_rank_us": 120070000,
+      "mean_us": 37281666.67
+    },
+    "primary_p95": {
+      "delay_us": 121700000,
+      "requests": 36,
+      "misses": 11,
+      "launches": 1,
+      "p95_nearest_rank_us": 120070000,
+      "mean_us": 37281666.67
     },
     "calibrated": {
       "delay_us": 121700000,

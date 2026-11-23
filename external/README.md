@@ -11,8 +11,12 @@ We used GPUHedge's 60-second deadline and chronological split, taking rounds 1â€
 | Policy on the 36 later rounds | Missed 60 s deadline | Backup launches | p95, nearest rank |
 | --- | ---: | ---: | ---: |
 | RunPod primary only | 11 / 36 | 0 / 36 | 120.07 s |
+| Primary p75, 116.1 s | 11 / 36 | 4 / 36 | 120.07 s |
+| Primary p95, 121.7 s | 11 / 36 | 1 / 36 | 120.07 s |
 | Selected 121.7 s delay | 11 / 36 | 1 / 36 | 120.07 s |
 | GPUHedge's fixed 10 s delay, same provider pair | 1 / 36 | 11 / 36 | 52.18 s |
+
+The percentile rules use only primary durations from the first 18 rounds. Take the nearest-rank percentile and round up to the next 0.1-second grid point when needed. With ties suppressing launches, p75 caps calibration launches at 25%. Both percentile delays exceeded the 60-second deadline, so even an instantaneous backup at those settings could never rescue a deadline miss. The fitted delay matched p95 exactly. Primary-only achieved the same held-out misses and p95 with zero duplicates.
 
 The calibrated delay achieved zero rescues. At 10 seconds, the replay rescued ten misses, but its 11 launches on 36 later rounds (30.6%) exceeded the launch budget. On the 18 calibration rounds, the same comparator needed seven launches. Only four were feasible under the cap. Loosening the budget leads to a different engineering decision. [Full numerical results](results.json)
 

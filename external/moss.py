@@ -78,6 +78,13 @@ def summarize(pairs, row):
             "mean_us": round(row["elapsed_us"] / len(times), 2)}
 
 
+def primary_percentile_index(calibration, percentile):
+    """Round the nearest-rank primary quantile up to a supported delay."""
+    ordered = sorted(primary for primary, _ in calibration)
+    rank = (percentile * len(ordered) + 99) // 100
+    return (ordered[rank - 1] + STEP - 1) // STEP
+
+
 def evaluate(pairs, binary):
     if len(pairs) != 54:
         raise ValueError("expected 54 MOSS-TTS rounds")
@@ -85,6 +92,8 @@ def evaluate(pairs, binary):
     cal = curve(binary, calibration)
     feasible = [r for r in cal if r["launches"] * 4 <= len(calibration)]
     selected = min(feasible, key=lambda r: (r["leaf_misses"], r["launches"], r["delay_us"]))
+    p75 = primary_percentile_index(calibration, 75)
+    p95 = primary_percentile_index(calibration, 95)
     later = curve(binary, evaluation)
     result = {"source": URL, "sha256": SHA256, "primary": "runpod", "backup": "modal",
               "slo_us": SLO, "step_us": STEP, "points": POINTS, "calibration_launch_cap": 0.25,
@@ -94,6 +103,8 @@ def evaluate(pairs, binary):
         # Both arms finish within the upstream 300 s observation cap.
         result[name] = {"primary_only": summarize(subset, table[-1]),
                         "upstream_fixed_10s": summarize(subset, table[10_000_000 // STEP]),
+                        "primary_p75": summarize(subset, table[p75]),
+                        "primary_p95": summarize(subset, table[p95]),
                         "calibrated": summarize(subset, table[selected["delay_us"] // STEP])}
     return result
 
