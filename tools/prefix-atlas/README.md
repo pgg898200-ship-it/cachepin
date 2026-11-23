@@ -14,10 +14,10 @@ Linux x86-64 users with Python 3.9+ and glibc 2.17+ can install the 206 KiB whee
 python -m pip install --no-index --find-links https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/dist/ prefix-atlas==0.1.0
 ```
 
-With Python 3.9+ and a C++17 compiler, install the package from GitHub. It has no Python runtime dependencies.
+With Python 3.9+ and a Unix-like C++17 toolchain, pip can build the source archive without a Git checkout. Pip downloads setuptools for the isolated build. The installed CLI has no Python runtime dependencies.
 
 ```sh
-python -m pip install 'git+https://github.com/pgg898200-ship-it/cachepin.git#subdirectory=tools/prefix-atlas'
+python -m pip install https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/dist/prefix_atlas-0.1.0.tar.gz
 prefix-atlas requests.jsonl --block-size 16 --capacities 8192,65536
 prefix-atlas requests.jsonl --block-size 16 --curve > capacity.csv
 ```
