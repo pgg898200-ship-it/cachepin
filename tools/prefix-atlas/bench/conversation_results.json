@@ -1,0 +1,55 @@
+{
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "arch": "x86_64",
+  "cpu": "AMD EPYC 9V45 96-Core Processor",
+  "compiler": "c++ (Debian 14.2.0-19) 14.2.0",
+  "flags": [
+    "-O3",
+    "-DNDEBUG",
+    "-march=native",
+    "-std=c++17"
+  ],
+  "warmups": 1,
+  "samples": 9,
+  "results": [
+    {
+      "name": "conversation",
+      "nodes": 10237,
+      "requests": 12031,
+      "page_accesses": 276491,
+      "mode": "prefix",
+      "capacities": "0,1024,8192,65536,147880,147881",
+      "input_sha256": "5b6feb80382911dd00c36b9955fe07b458fb69a79312b6db567d8d8dd84a6c63",
+      "histogram_sha256": "56e8c06befbfc86825f7590660a34abfe0c835e6bf719350b1683e7f6c475ea1",
+      "milliseconds": {
+        "curve": [
+          6.233884,
+          5.88851,
+          6.053234,
+          17.962551,
+          5.440731,
+          6.086895,
+          9.01777,
+          5.09202,
+          11.988674
+        ],
+        "expanded": [
+          5.504566,
+          11.467586,
+          4.930559,
+          4.752444,
+          20.208031,
+          5.44751,
+          6.936833,
+          8.891101,
+          5.284537
+        ]
+      },
+      "median_ms": {
+        "curve": 6.086895,
+        "expanded": 5.504566
+      },
+      "speedup": 0.9043306973424052
+    }
+  ]
+}

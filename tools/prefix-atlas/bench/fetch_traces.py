@@ -13,6 +13,11 @@ MOONCAKE = (
     "3cca71daccf2a7afb8fe3f0295358f70e3a69fdb/FAST25-release/traces/toolagent_trace.jsonl",
     "48a2db1a13d3bc05e6330140c64f604ba366df20d3c9e128b5c35a01c1fa5f71",
 )
+CONVERSATION = (
+    "https://raw.githubusercontent.com/kvcache-ai/Mooncake/"
+    "3cca71daccf2a7afb8fe3f0295358f70e3a69fdb/FAST25-release/traces/conversation_trace.jsonl",
+    "b8cbb061a85206d729d91cdc2981f43c9e0d99209dce588d3af5f7934408b9df",
+)
 HARVARD = (
     "https://huggingface.co/datasets/harvardMadsys/freeinference_agentic_trace/resolve/"
     "bb26cf72c9c20f2b05f765d88548156a74d3c253/release/2026-05-17_2026-05-23/"
@@ -49,13 +54,14 @@ def project_harvard(source, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("dataset", choices=["mooncake", "harvard"])
+    sources = {"mooncake": MOONCAKE, "conversation": CONVERSATION, "harvard": HARVARD}
+    parser.add_argument("dataset", choices=sources)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(dir=args.output.parent) as work:
         source = Path(work) / "source"
         result = source
-        download(MOONCAKE if args.dataset == "mooncake" else HARVARD, source)
+        download(sources[args.dataset], source)
         if args.dataset == "harvard":
             result = Path(work) / "projected.jsonl"
             project_harvard(source, result)

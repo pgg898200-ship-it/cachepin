@@ -53,6 +53,8 @@ The importer accepts numeric timestamps, input lengths and integer hash lists, s
 
 ## What was measured
 
+On Mooncake’s FAST’25 **conversation** trace, an 8,192-page cache served 54,387 of 276,491 complete page references (19.67%). Even an unlimited cache could serve only 38.19%, so an 80% target is unreachable on that workload. [Conversation trace, counts and reproduction commands](trace_sources.md#mooncake-conversation)
+
 | Workload and operation | Prefix Atlas | Native page-by-page control | Ratio |
 | --- | ---: | ---: | ---: |
 | FreeInference, 7 serial prefix-cache budgets from a prepared tree | 3.59 ms | 120.53 ms | 33.55× |
