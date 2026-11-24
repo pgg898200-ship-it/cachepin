@@ -64,6 +64,27 @@ auto out = stops.feed(cursor, "hello </to");
 
 The input span borrows the current chunk. The prefix span and EOF tail borrow the plan. Consume the views before the backing storage expires. Share a plan across threads with one cursor per ordered stream. Reset the cursor before switching plans.
 
+### Install on hosts without a compiler
+
+Build the wheel on a machine or container matching the target's CPython version, architecture and system libraries. For Linux with GCC, use a builder with Python development headers, pip, setuptools 77 or newer, and wheel installed. Start in an empty directory:
+
+```sh
+set -eu
+archive=pgg_cutstream-0.1.0.tar.gz
+curl -fsSLo "$archive" "https://pgg-cutstream.tancurl3.chatgpt.site/$archive"
+echo "0821b30d237a92cf5130f88c511b657fd1e576c8af4eca471c5106d586889f90  $archive" | sha256sum -c -
+CC=gcc CXX=g++ python -m pip wheel --no-cache-dir --no-index --no-deps --no-build-isolation --wheel-dir wheelhouse "$archive"
+```
+
+Copy the wheelhouse to the matching runtime. In its Python environment:
+
+```sh
+python -m pip install --no-index --only-binary=:all: --find-links=wheelhouse pgg-cutstream==0.1.0
+printf 'hello </tool>trailing' | cutstream --stop '</tool>'
+```
+
+The command prints `hello ` and discards the delimiter and trailing bytes. A locally built Linux wheel may depend on the builder's glibc and C++ runtime. Build separately for each target image and Python ABI.
+
 ## What it guarantees
 
 The earliest **ending byte** wins. Among markers ending together, the longest wins, with original index breaking duplicates. Zero markers pass through every byte. An empty marker is rejected. A hit consumes through the delimiter, leaving trailing bytes available to a framing caller. EOF flushes an incomplete marker literally. These byte rules are independent of transport partitioning and preserve arbitrary binary input. A text sink should apply an incremental character decoder to the visible bytes.
