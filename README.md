@@ -19,11 +19,11 @@ The demo chooses a **1,177 µs** delay on the first 700 requests. On the next 30
 To install the commands in a virtual environment and replay your own trace, run
 
 ```sh
-python3 -m pip install https://huggingface.co/spaces/pgg-engineering/racecurve/resolve/main/racecurve_tools-0.1.0-py3-none-any.whl
+python3 -m pip install https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/racecurve/packages/racecurve_tools-0.2.0-py3-none-any.whl
 racecurve-demo your-paired-trace.csv --slo-us 6000 --budget-pct 25
 ```
 
-The 15 KB wheel includes the example and requires only the Python standard library at runtime. For complete pairs, use the CSV header `primary_us,backup_us` and put one logical request on each row. Preserve each pair, including shared slowdowns. Two independently sampled latency histograms lose that information.
+The wheel includes the example and requires only the Python standard library at runtime. For complete pairs, use the CSV header `primary_us,backup_us` and put one logical request on each row. Preserve each pair, including shared slowdowns. Two independently sampled latency histograms lose that information.
 
 ## What happens on real requests?
 

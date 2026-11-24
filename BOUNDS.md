@@ -8,6 +8,12 @@ printf 'winner,elapsed_us,old_delay_us\nbackup,8,5\n' | python3 bounds.py - --sl
 
 The output for delay 15 contains `"sum_response_us":[9,18]` and `"slo_misses":[0,1]`. Divide each endpoint by `requests` to obtain the exact empirical mean response in µs or miss fraction. An upper sum of `null` means no finite upper bound. Miss bounds always have finite endpoints. The index retains integers through calculation and JSON serialization.
 
+## Can a changed delay meet my duplicate-request budget?
+
+Version 0.2.0 adds `backup_launches` to each CLI result. A request launches a backup when its primary duration strictly exceeds the delay. Count rows whose lower primary duration exceeds the delay for the minimum. Count rows whose upper duration exceeds it or is unknown for the maximum. The upper count can certify a budget on this trace. A budget below the lower count is infeasible. A budget between those counts can depend on the hidden primary durations.
+
+For the single backup winner above, the original 5 µs delay gives `"backup_launches":[1,1]`. At 15 µs the result is `[0,1]` because the canceled primary could finish before or after the proposed timer. Each endpoint is attainable under the fixed-duration assumptions below. [Run the measured GPU trace example](external/README.md#how-many-duplicates-can-a-winner-log-identify)
+
 ## Input contracts
 
 Use `winner,elapsed_us,old_delay_us` when each row records a completed race, the row-specific configured hedge delay and which replica answered. Use `primary` or `backup` as the winner. Assume the primary starts at zero, the backup starts exactly at the logged delay only if the primary has not completed, and the primary wins when both would finish at the same time. All times are nonnegative whole microseconds. For a primary win at time e after a delay d, the unobserved backup could take any duration from max(0,e−d) onward. A backup win implies e≥d, backup service e−d, and primary service at least e+1. Race logs with asynchronous dispatch, rounded timestamps that obscure ties, or errors that can terminate a branch early need explicit interval observations.

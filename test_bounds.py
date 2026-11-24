@@ -24,6 +24,8 @@ class TestBounds(unittest.TestCase):
                     possible = [min(p, delay + b) for p, b in latent]
                     result = index.query(delay)
                     self.assertEqual(result["sum_response_us"], [min(possible), max(possible)])
+                    launches = [int(p > delay) for p, _ in latent]
+                    self.assertEqual(result["backup_launches"], [min(launches), max(launches)])
                     outcomes = [int(r > 6) for r in possible]
                     self.assertEqual(result["slo_misses"], [min(outcomes), max(outcomes)])
 
@@ -41,6 +43,9 @@ class TestBounds(unittest.TestCase):
                         choices = [a.high, None if b.high is None else delay + b.high]
                         high.append(min((c for c in choices if c is not None), default=None))
                     result = index.query(delay)
+                    self.assertEqual(result["backup_launches"],
+                                     [sum(a.low > delay for a, _ in dataset),
+                                      sum(a.high is None or a.high > delay for a, _ in dataset)])
                     high_total = None if None in high else sum(high)
                     self.assertEqual(result["sum_response_us"], [sum(low), high_total])
                     self.assertEqual(result["slo_misses"],

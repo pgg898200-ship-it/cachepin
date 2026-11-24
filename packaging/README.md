@@ -3,7 +3,7 @@
 Choose a backup-request delay from paired HTTP timings, or determine how tightly a canceled-race log bounds its possible performance. Requires Python 3.10 or later. The wheel uses only the Python standard library at runtime.
 
 ```sh
-python3 -m pip install https://huggingface.co/spaces/pgg-engineering/racecurve/resolve/main/racecurve_tools-0.1.0-py3-none-any.whl
+python3 -m pip install https://raw.githubusercontent.com/pgg898200-ship-it/cachepin/racecurve/packages/racecurve_tools-0.2.0-py3-none-any.whl
 racecurve-demo
 ```
 
@@ -12,7 +12,7 @@ The demo ships with 1,000 complete primary/backup HTTP timings from a constructe
 | Command | Input | Output |
 | --- | --- | --- |
 | `racecurve-demo pairs.csv --slo-us 6000 --budget-pct 25` | Ordered CSV with header `primary_us,backup_us` | JSON with selected delay, calibration, holdout and primary-only comparison |
-| `racecurve-bounds races.csv --slo-us 6000 --delay-us 0 1000 2000` | CSV with header `winner,elapsed_us,old_delay_us`, or explicit interval observations | Sharp empirical response-sum and deadline-miss bounds for each delay |
+| `racecurve-bounds races.csv --slo-us 6000 --delay-us 0 1000 2000` | CSV with header `winner,elapsed_us,old_delay_us`, or explicit interval observations | Sharp empirical bounds on response sum, deadline misses and backup launches for each delay |
 | `racecurve-otlp trace.jsonl` | Caller-side OTLP JSON trace batches with documented `racecurve.*` attributes | Observation CSV suitable for piping into `racecurve-bounds -` |
 
 The selector considers integer delays from zero through the deadline, plus a primary-only option. It rejects policies above the calibration launch budget, minimizes deadline misses, then chooses fewer launches and the smallest delay. A `null` delay represents primary-only. Holdout rows can exceed the calibration launch budget. Full native fanout analysis, observation formats and instrumentation examples are in the [project](https://huggingface.co/spaces/pgg-engineering/racecurve).

@@ -36,6 +36,7 @@ experiments/shared-slots/measured/results.json
 experiments/shared-slots/run.py
 external/README.md
 external/check_gpuhedge.py
+external/check_launch_bounds.py
 external/moss.py
 external/results.json
 external/test_moss.py

@@ -41,3 +41,17 @@ git clone https://github.com/mireklzicar/gpuhedge.git /tmp/gpuhedge-moss
 git -C /tmp/gpuhedge-moss checkout --detach 669c8c9327c95164cfd317a4cc4c7c123f4afcc4
 python3 external/check_gpuhedge.py /tmp/gpuhedge-moss
 ```
+
+## How many duplicates can a winner log identify?
+
+Run `python3 external/check_launch_bounds.py` from the repository root, or pass `--source /path/to/moss_rounds.jsonl` for an offline run. The script verifies the pinned upstream checksum, keeps the 36 held-out pairs and models a 10-second delayed backup. It hides the losing duration, then counts the possible backup launches using only the simulated winner log. The complete pairs supply the reference column. The original GPUHedge experiment observed both arms. Cancellations here are simulated.
+
+| Proposed timer | Minimum launches | Complete-pair replay | Maximum launches |
+| --- | ---: | ---: | ---: |
+| Immediate | 36 | 36 | 36 |
+| 10 s (original) | 11 | 11 | 11 |
+| 60 s (deadline) | 1 | 11 | 11 |
+| 116.1 s (primary p75) | 0 | 4 | 11 |
+| 121.7 s (primary p95) | 0 | 1 | 11 |
+
+A 25% duplicate budget permits nine launches on these 36 requests. For the p95 timer the winner log allows zero through eleven, so it cannot certify the budget. The complete pairs give one launch. At the original 10-second timer the log identifies all eleven launches, enough to rule that policy out under the same budget. These intervals describe the recorded sample under fixed service times.

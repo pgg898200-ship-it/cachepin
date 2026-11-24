@@ -136,13 +136,20 @@ class Bounds:
         self.slo = nonnegative(slo_us)
         self.lower = _Endpoint(self.slo)
         self.upper = _Endpoint(self.slo)
+        self.primary_lows = []
+        self.primary_finite_highs = []
         self.count = 0
         for a, b in pairs:
+            self.primary_lows.append(a.low)
+            if a.high is not None:
+                self.primary_finite_highs.append(a.high)
             self.lower.add(a.low, b.low)
             self.upper.add(a.high, b.high)
             self.count += 1
         if not self.count:
             raise ValueError("trace has no observations")
+        self.primary_lows.sort()
+        self.primary_finite_highs.sort()
         self.lower.finish()
         self.upper.finish()
 
@@ -150,7 +157,10 @@ class Bounds:
         delay = nonnegative(delay_us)
         lo_sum, lo_miss = self.lower.query(delay)
         hi_sum, hi_miss = self.upper.query(delay)
-        return {"delay_us": delay, "sum_response_us": [lo_sum, hi_sum],
+        # An unknown upper endpoint can exceed every finite launch delay.
+        launches = [self.count - bisect_right(self.primary_lows, delay),
+                    self.count - bisect_right(self.primary_finite_highs, delay)]
+        return {"backup_launches": launches, "delay_us": delay, "sum_response_us": [lo_sum, hi_sum],
                 "slo_misses": [lo_miss, hi_miss], "requests": self.count}
 
 
