@@ -44,11 +44,15 @@ class PythonApi(unittest.TestCase):
             s.feed("text")
         self.assertEqual(s.feed(b"pass"), b"pass")
 
-    def test_gateway(self):
+    def load_gateway(self):
         path = Path(__file__).resolve().parents[1] / "examples" / "gateway.py"
         spec = importlib.util.spec_from_file_location("gateway", path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        return mod
+
+    def test_gateway(self):
+        mod = self.load_gateway()
 
         async def events():
             for s in ["😀hi", "世", "界!", "unread"]:
@@ -59,3 +63,25 @@ class PythonApi(unittest.TestCase):
         async def run():
             return "".join([x async for x in mod.visible_text(events(), Plan(["界".encode()]))])
         self.assertEqual(asyncio.run(run()), "😀hi世")
+
+    def test_selected_gateway_choice(self):
+        mod = self.load_gateway()
+
+        def choice(index, content, reason=None):
+            return SimpleNamespace(index=index, delta=SimpleNamespace(content=content),
+                                   finish_reason=reason)
+
+        async def events(last, reason):
+            yield SimpleNamespace(choices=[])
+            yield SimpleNamespace(choices=[choice(1, None), choice(0, "wrong")])
+            yield SimpleNamespace(choices=[choice(1, "😀hi</")])
+            yield SimpleNamespace(choices=[choice(0, "tool>", "stop")])
+            yield SimpleNamespace(choices=[choice(0, None), choice(1, last, reason)])
+            self.fail("read past the selected choice's terminal event")
+
+        async def collect(last, reason):
+            stream = mod.visible_text(events(last, reason), Plan([b"</tool>"]), choice_index=1)
+            return [text async for text in stream]
+
+        self.assertEqual(asyncio.run(collect("tool>hidden", None)), ["😀hi"])
+        self.assertEqual(asyncio.run(collect("to", "length")), ["😀hi", "</to"])
