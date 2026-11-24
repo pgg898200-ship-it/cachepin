@@ -1,6 +1,6 @@
 # Production workload fixtures
 
-The benchmark uses published, anonymized request traces. Both workloads contain real prefix block identities. Token-count-only traces cannot reproduce the same block sharing. Download and verify the inputs from the repository root with Python 3 and the zstd CLI.
+The benchmark uses published, anonymized request traces. The workloads contain real prefix block identities. Token-count-only traces cannot reproduce the same block sharing. Download and verify the inputs from the Prefix Atlas tool directory with Python 3 and the zstd CLI.
 
 ```sh
 python3 bench/fetch_traces.py mooncake /tmp/mooncake.jsonl
@@ -15,6 +15,30 @@ python3 bench/fetch_traces.py harvard /tmp/harvard.jsonl
 **Mooncake.** Qin et al., *Mooncake: Trading More Storage for Less Computation*, FAST ’25. This fixture is the complete released hour of Tool and Agent requests, unchanged at revision `3cca71daccf2a7afb8fe3f0295358f70e3a69fdb`. Each source hash describes a prefix through one 512-token page. The codec retains partial last pages. The pinned repository includes Apache and Mulan license files. The download script fetches the trace directly from its publisher. [Paper](https://www.usenix.org/conference/fast25/presentation/qin) · [Trace description](https://github.com/kvcache-ai/Mooncake/blob/main/FAST25-release/README.md)
 
 **FreeInference.** Harvard MaDSys, *From Requests to Sessions: A Large-Scale Characterization of Human-Driven Agentic Workloads*. We selected the first released date, May 17, 2026, from dataset revision `bb26cf72c9c20f2b05f765d88548156a74d3c253`. The source is CC BY 4.0. The projection includes every top-level request in the day's 25 root sessions, stable-sorted by `start_ms`. It omits nested subagent requests and copies the ordered 16-token `block_ids` into `hash_ids`. The fixture sets `timestamp` to source start time in milliseconds, `output_length` to provider completion tokens, and `input_length` to 16 times the number of complete blocks under the trace's tokenizer. The projection deliberately retains four fields for comparable codec inputs. The provider's original prompt-token count can differ. [Dataset and attribution](https://huggingface.co/datasets/harvardMadsys/freeinference_agentic_trace) · [License](https://creativecommons.org/licenses/by/4.0/)
+
+## Mooncake conversation
+
+The FAST’25 Conversation workload contains 12,031 online requests sampled over one hour. The publisher released it separately from its Tool and Agent workload. The download helper verifies the original 3,029,533-byte JSONL against SHA-256 `b8cbb061a85206d729d91cdc2981f43c9e0d99209dce588d3af5f7934408b9df`. We used every request, stable-sorted by arrival, and excluded partial trailing 512-token pages. [Pinned trace and workload description](https://github.com/kvcache-ai/Mooncake/tree/3cca71daccf2a7afb8fe3f0295358f70e3a69fdb/FAST25-release)
+
+| Capacity (pages) | Hit pages | Hit rate |
+| ---: | ---: | ---: |
+| 0 | 0 | 0.00% |
+| 1,024 | 13,034 | 4.71% |
+| 8,192 | 54,387 | 19.67% |
+| 65,536 | 103,786 | 37.54% |
+| 147,880 | 105,591 | 38.19% |
+| 147,881 | 105,592 | 38.19% |
+
+Of 276,491 complete page references, 170,899 distinct pages each require a first access. The remaining 105,592 references set the maximum possible hit count, first reached at 147,881 pages. We checked all six counts by replaying the source hash IDs through a page-by-page LRU cache, looking up the resident prefix at arrival and touching pages deepest first on completion.
+
+```sh
+python3 bench/fetch_traces.py conversation /tmp/conversation.jsonl
+python3 mooncake.py --block-size 512 /tmp/conversation.jsonl > /tmp/conversation.tree
+prefix-atlas /tmp/conversation.tree --capacities 0,1024,8192,65536,147880,147881
+python3 bench/compare_curves.py --no-synthetic --prefix-capacities 0,1024,8192,65536,147880,147881 /tmp/conversation.tree
+```
+
+On the prepared tree the two native analyzers agreed at every tested budget. Median runtime over nine trials was 6.09 ms for Prefix Atlas and 5.50 ms for the expanded-page control. These measurements cover serial cache analysis and exclude JSONL import. [Trial times and machine details](bench/conversation_results.json)
 
 ## PrefixSim comparison
 
