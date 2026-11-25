@@ -1,4 +1,5 @@
 """The analyzer's source download must rebuild offline from its own files."""
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -19,6 +20,11 @@ class SourceDownloadTest(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             work = Path(tmp)
             original = build(ROOT, work / "site")
+            wheel = next((ROOT / "packages").glob("racecurve_tools-0.2.0-*.whl"))
+            wheel_bytes = wheel.read_bytes()
+            self.assertEqual((original.parent / wheel.name).read_bytes(), wheel_bytes)
+            checksums = (original.parent / "SHA256SUMS").read_text().splitlines()
+            self.assertIn(f"{hashlib.sha256(wheel_bytes).hexdigest()}  {wheel.name}", checksums)
             with ZipFile(original) as archive:
                 archive.extractall(work)
 
@@ -28,8 +34,11 @@ class SourceDownloadTest(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("local development file")
 
+            (source / "dist").mkdir()
+            (source / "dist" / wheel.name).write_bytes(b"local rebuild")
             rebuilt = build(source, work / "rebuilt")
             self.assertEqual(original.read_bytes(), rebuilt.read_bytes())
+            self.assertEqual((rebuilt.parent / wheel.name).read_bytes(), wheel_bytes)
             self.assertFalse((rebuilt.parent / "notes.md").exists())
 
 

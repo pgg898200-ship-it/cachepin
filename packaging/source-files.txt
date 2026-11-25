@@ -44,6 +44,7 @@ integrations/README.md
 integrations/otlp.py
 integrations/race.otlp.jsonl
 integrations/test_otlp.py
+packages/racecurve_tools-0.2.0-py3-none-any.whl
 packaging/README.md
 packaging/build_site.py
 packaging/build_wheel.py

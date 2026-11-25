@@ -37,9 +37,14 @@ def main():
             info.compress_type = ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
             package.writestr(info, path.read_bytes())
-    wheel_dir = ROOT/"dist"
-    for wheel in sorted(wheel_dir.glob("*.whl")):
-        shutil.copyfile(wheel,target/wheel.name)
+    # Include local development builds and prefer the published bytes for a
+    # version that already ships with the source distribution.
+    wheels = {wheel.name: wheel for wheel in (ROOT / "dist").glob("*.whl")}
+    for path in files:
+        if path.parent == ROOT / "packages" and path.suffix == ".whl":
+            wheels[path.name] = path
+    for name, wheel in wheels.items():
+        shutil.copyfile(wheel, target / name)
     (target/"SHA256SUMS").write_text("".join(
         hashlib.sha256(path.read_bytes()).hexdigest()+"  "+path.name+"\n"
         for path in [archive,*sorted(target.glob("*.whl"))]))

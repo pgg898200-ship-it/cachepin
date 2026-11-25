@@ -2,6 +2,17 @@
 
 Racecurve estimates the outcomes of racing one primary and one backup for an idempotent call. It preserves the association between attempts for the same logical request. The static browser explorer reads the file on your device. A C++17 streaming kernel and Python utilities are in [the source download](source.zip).
 
+## Check a duplicate budget from the command line
+
+Download the [Python wheel](racecurve_tools-0.2.0-py3-none-any.whl) and [release checksums](SHA256SUMS). With Python 3.10 or later, run the following commands from the download directory.
+
+```sh
+python3 -m pip install ./racecurve_tools-0.2.0-py3-none-any.whl
+printf 'winner,elapsed_us,old_delay_us\nbackup,8,5\n' | racecurve-bounds - --slo-us 10 --delay-us 5 15
+```
+
+For this one request, the 5 µs timer certainly launched a backup. At 15 µs the reported `backup_launches` range is `[0,1]` because the canceled primary's eventual completion time is unknown.
+
 ## Record one row per request
 
 The browser accepts simple numeric CSV or the four observation status keywords and intervals below. Preserve arrival order. Provide at least two rows and one of these exact headers.
