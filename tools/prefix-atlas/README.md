@@ -68,6 +68,8 @@ The two native implementations emitted identical hit counts. Trials used the sam
 
 This is a sizing model for serial, fully associative LRU. At arrival a request can reuse its longest contiguous resident prefix. On completion, the cache makes shallower blocks most recent. The denominator is the count of referenced full pages. Concurrency, in-flight pins, decode memory, sliding windows, routing and preemption require engine-specific measurements. To model separate tenants or model namespaces, analyze each isolated cache separately. PrefixSim supports additional cache policies. [Model details](README-curve.md) · [PrefixSim](https://github.com/cacheMon/PrefixSim)
 
+On a four-request CPU inference check, returning to an earlier branch exposed a difference between the model and llama.cpp’s active context. Prefix Atlas predicted four reusable pages for that request. The llama-cpp-python completion API reused two with its active context alone and four with its RAM snapshot cache enabled. [Request-level results and reproduction](trace_sources.md#llamacpp-prompt-reuse)
+
 ## Extract individual requests for downstream replay
 
 The optional indexed archive preserves original bytes and line endings. It stores decimal ID runs and compresses bounded groups of rows with Zstandard. It supports duplicate and out-of-order row selections. Install libzstd development headers to build the archive command.
