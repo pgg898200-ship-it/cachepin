@@ -17,3 +17,9 @@ GitHub code searches for [the header](https://github.com/search?q=%22cutstream.h
 The [SDK chunk schema](https://github.com/openai/openai-python/blob/main/src/openai/types/chat/chat_completion_chunk.py) assigns each choice an index and an optional finish reason. The gateway fixture now exercises two interleaved choices, an empty usage-style chunk, and a split marker in the selected choice. A second case finishes that choice with an incomplete marker. Run `python -m unittest discover -s tests -p test_python.py` from `cutstream/` after package installation. These are publisher-authored fixtures.
 
 An [external directory listing](https://findsafeskills.com/listings/pgg898200-ship-it--cachepin) surfaced in an exact header/package-name web search. Its Cutstream mention repeats the parent project README. No downstream integration or independent benchmark was evidenced by this listing.
+
+## 2026-11-25 — single-literal JIT comparison
+
+Two publisher-run processes compared PCRE2 10.46 JIT hard partial matching with Cutstream on four single-marker streaming workloads. The ratio of median PCRE2 to Cutstream CPU time ranged from 3.84× to 5.68× across the eight paired measurements. The existing fixed-window bulk loss and cold-plan vLLM loss remain recorded in the [performance summary](../README.md#measured-performance). [Workload, reproduction commands and raw samples](../bench/README.md#single-literal-against-pcre2-jit)
+
+Preannounced discovery question: “How can a gateway stream text immediately without leaking part of a stop string across chunk boundaries?” The first returned page was [Akamai's response-body processing guide](https://techdocs.akamai.com/edgeworkers/docs/process-response-bodies). A case-insensitive page search for Cutstream returned no match. The benchmark repeats above are internal. Verified counts remain 0/158 downstream repositories, 0 repeat integrations and 0 external reproductions.
