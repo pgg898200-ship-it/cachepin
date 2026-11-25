@@ -26,3 +26,27 @@ The fixture validator compares match IDs and consumed lengths after every feed. 
 The recorded run used a Linux x86-64 virtual machine reporting AMD EPYC 9V74, GCC 14.2.0 and glibc 2.41, with process affinity set to reported CPU 6. The machine was shared. The rescanners are implementations in this benchmark. Performance numbers are for matcher kernels and are not measurements of serving engines.
 
 In the recorded run, the 32-marker near-miss fixture took 8.85 CPU ns per feed for CutStream and 132.43 for grouped-rescan. In the four-marker bulk case, each stream's entire 256-byte payload arrived in a single call, and fixed-find took 39.06 CPU ns per feed versus CutStream's 92.77. The full ten-case matrix and all nine samples per implementation are in [results.csv](results.csv).
+
+## Single literal against PCRE2 JIT
+
+A gateway already using PCRE2 can compile a literal once, search each chunk with hard partial matching, and retain the suffix identified by a partial result. The [comparator](pcre_literal.hpp) calls the 8-bit JIT entry point directly, with one shared match-data object and joining buffer per worker. Compilation and JIT setup occur before timing. Both engines return borrowed output. The verifier checks per-feed emission, match ID, consumed length and final bytes. The experiment covers the single literal `<|im_end|>`. Multiple regex alternatives can choose different winning stops. [PCRE2 partial matching](https://www.pcre.org/current/doc/html/pcre2partial.html)
+
+From the Cutstream directory on Linux with PCRE2 development headers and JIT support:
+
+```sh
+pkg-config --modversion libpcre2-8
+c++ -std=c++17 -O3 -DNDEBUG -Iinclude -DCUTSTREAM_BENCH_PCRE2 bench/bench.cpp -lpcre2-8 -o /tmp/cutbench-pcre2
+/tmp/cutbench-pcre2 9 > pcre2.csv
+/tmp/cutbench-pcre2 9 > pcre2-repeat.csv
+```
+
+Two publisher-run processes on Linux x86-64 (AMD EPYC 9V74, Debian 13, GCC 14.2.0, PCRE2 10.46) each rotated the four engines through one warm-up and nine measured rounds. The table gives median process CPU ns/feed for the first run and PCRE2 time divided by Cutstream time for both. All payloads were 256 bytes. One-byte chunks used 2,048 interleaved streams and the other cases used 4,096.
+
+| Input | Chunk bytes | Cutstream | PCRE2 JIT | Ratio, first / repeat |
+| --- | ---: | ---: | ---: | ---: |
+| Ordinary text | 1 | 5.041 | 28.633 | 5.68× / 5.47× |
+| Ordinary text | 4 | 5.222 | 27.885 | 5.34× / 5.02× |
+| Ordinary text | 64 | 7.141 | 28.076 | 3.93× / 3.84× |
+| Frequent incomplete prefixes | 4 | 6.889 | 30.735 | 4.46× / 3.93× |
+
+The grouped literal rescanner was the closest comparator in each of these four cases. All four engines' CPU and wall samples, counts and output checksums are in the [first run](pcre2.csv) and [repeat](pcre2-repeat.csv). These measurements cover a reused plan and one worker on synthetic byte streams. They exclude JIT startup, output copying, network latency and model inference.

@@ -1,7 +1,7 @@
 include include/cutstream.hpp
 recursive-include tests *.cpp *.py
 recursive-include examples *.py
-recursive-include bench *.cpp *.md *.csv
+recursive-include bench *.hpp *.cpp *.md *.csv
 recursive-include compare *.py *.cpp *.rs *.md *.json
 recursive-include evidence *.json *.jsonl *.csv *.md
 recursive-include space *.html *.md

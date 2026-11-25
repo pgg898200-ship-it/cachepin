@@ -122,6 +122,10 @@ template<bool FixedWindow> struct Rescan {
     }
 };
 
+#ifdef CUTSTREAM_BENCH_PCRE2
+#include "pcre_literal.hpp"
+#endif
+
 struct Case {
     std::string name;
     std::size_t streams, bytes, chunk;
@@ -252,35 +256,46 @@ int main(int argc, char** argv) {
     std::cout << "case,engine,stops,streams,chunk_bytes,feed_calls,input_bytes,median_wall_ns_per_feed,median_cpu_ns_per_feed,"
               << "mean_held_bytes,max_held_bytes,output_bytes,output_fnv64,samples,sample_wall_ns_per_feed,sample_cpu_ns_per_feed\n";
     for (const auto& spec : cases) {
-        std::array<Stats,3> stats{verify<Cut>(spec,true),verify<Rescan<false>>(spec,true),
-                                  verify<Rescan<true>>(spec,false)};
-        std::array<std::vector<double>,3> wall_times, cpu_times;
+        struct Entry {
+            const char* name;
+            Stats stats;
+            Timing (*run)(const Case&, const Stats&);
+            std::vector<double> wall, cpu;
+        };
+#ifdef CUTSTREAM_BENCH_PCRE2
+        if (spec.patterns.words.size() != 1) continue;
+#endif
+        std::vector<Entry> engines{
+            {"cutstream", verify<Cut>(spec,true), time_run<Cut>, {}, {}},
+            {"grouped-rescan", verify<Rescan<false>>(spec,true), time_run<Rescan<false>>, {}, {}},
+            {"fixed-find", verify<Rescan<true>>(spec,false), time_run<Rescan<true>>, {}, {}}
+        };
+#ifdef CUTSTREAM_BENCH_PCRE2
+        engines.push_back({"pcre2-jit", verify<PcreLiteral>(spec,true), time_run<PcreLiteral>, {}, {}});
+#endif
         for (int round = -1; round < samples; ++round) {
-            for (int shift = 0; shift < 3; ++shift) {
-                int id = (round + 1 + shift) % 3;
-                Timing ns = id == 0 ? time_run<Cut>(spec,stats[id]) :
-                            id == 1 ? time_run<Rescan<false>>(spec,stats[id]) :
-                                      time_run<Rescan<true>>(spec,stats[id]);
+            for (std::size_t shift = 0; shift < engines.size(); ++shift) {
+                auto& engine = engines[(round + 1 + shift) % engines.size()];
+                Timing ns = engine.run(spec, engine.stats);
                 if (round >= 0) {
-                    wall_times[id].push_back(ns.wall_ns);
-                    cpu_times[id].push_back(ns.cpu_ns);
+                    engine.wall.push_back(ns.wall_ns);
+                    engine.cpu.push_back(ns.cpu_ns);
                 }
             }
         }
-        constexpr std::array<const char*,3> names{"cutstream","grouped-rescan","fixed-find"};
-        for (std::size_t id = 0; id < names.size(); ++id) {
+        for (const auto& engine : engines) {
             auto median = [](std::vector<double> t) {
                 std::sort(t.begin(), t.end());
                 return (t[(t.size()-1)/2] + t[t.size()/2]) * 0.5;
             };
-            auto& s = stats[id];
-            std::cout << spec.name << ',' << names[id] << ',' << spec.patterns.words.size() << ','
+            const auto& s = engine.stats;
+            std::cout << spec.name << ',' << engine.name << ',' << spec.patterns.words.size() << ','
                       << spec.streams << ',' << spec.chunk << ',' << s.calls << ',' << s.input_bytes
-                      << ',' << std::fixed << std::setprecision(3) << median(wall_times[id]) << ','
-                      << median(cpu_times[id]) << ',' << s.avg_held()
+                      << ',' << std::fixed << std::setprecision(3) << median(engine.wall) << ','
+                      << median(engine.cpu) << ',' << s.avg_held()
                       << ',' << s.max_held << ',' << s.output_bytes << ',' << std::hex
                       << s.checksum << std::dec << ',' << samples;
-            for (const auto* values : {&wall_times[id], &cpu_times[id]}) {
+            for (const auto* values : {&engine.wall, &engine.cpu}) {
                 std::cout << ',';
                 for (std::size_t i = 0; i < values->size(); ++i) {
                     if (i) std::cout << ' ';
