@@ -85,3 +85,26 @@ python bench/check_guidellm.py
 ```
 
 [GuideLLM trace-replay guide](https://vllm-project.github.io/guidellm/latest/guides/trace_replay/) · [Mooncake reader source](https://github.com/vllm-project/guidellm/blob/92799ecb9ff4c14d80efada9791d2aa6a5580ec0/src/guidellm/data/deserializers/trace_mooncake.py)
+
+## llama.cpp prompt reuse
+
+On 2026-11-25 we ran four serial, in-process completions with llama-cpp-python 0.3.16 and the stories260K GGUF on CPU. Each 33-token prompt contains two shared eight-token pages, two branch-specific pages and a different final token. Branch order is A, B, A, A. A fresh model instance starts each of the two runs. The active context holds 128 tokens. The second run also enables a 64 MiB LlamaRAMCache for saved inference states. [Fixture](https://huggingface.co/ggml-org/models/blob/499bc8821c6b12b4e53c5bffcb21ec206f212d81/tinyllamas/stories260K.gguf) · [Completion implementation](https://github.com/abetlen/llama-cpp-python/blob/v0.3.16/llama_cpp/llama.py)
+
+| Request | Atlas hit pages at an eight-page budget | Active context, tokens reused | With snapshots, tokens reused |
+| --- | ---: | ---: | ---: |
+| A, first visit | 0 | 0 | 0 |
+| B | 2 | 16 | 16 |
+| A, return | 4 | 16 | 32 |
+| A, consecutive | 4 | 32 | 32 |
+
+The Atlas budget fits all six distinct complete pages. The engine check counts tokens passed to the real evaluation method during each one-token completion and subtracts that count from the prompt length. The unique tail always requires evaluation, so dividing reused tokens by eight gives complete hit pages. On the return to A, the active context retains the common prefix with B. Restoring a saved state also recovers A’s suffix. The capacities in pages and snapshot bytes describe different cache mechanisms. Agreement here applies to this controlled sequence; the check does not measure concurrent serving, latency or equal memory cost.
+
+With the Prefix Atlas CLI on PATH and a Python environment with a C++ compiler, run:
+
+```sh
+python -m pip install llama-cpp-python==0.3.16
+curl -fL https://huggingface.co/ggml-org/models/resolve/499bc8821c6b12b4e53c5bffcb21ec206f212d81/tinyllamas/stories260K.gguf -o /tmp/stories260K.gguf
+python bench/check_llama_cpp.py /tmp/stories260K.gguf
+```
+
+The check verifies the model SHA-256, interns exact token prefixes for the CLI, and compares its cumulative counts with the engine’s per-request counts. It uses one CPU inference thread and requires no endpoint or GPU.

@@ -15,4 +15,6 @@ Prefix Atlas shipped on November 22, 2026 as a tool inside CachePin. A downstrea
 
 ## Compatibility evidence
 
-The project ran its own GuideLLM 0.8.1 integration check, compared 14 serial LRU hit counts with upstream PrefixSim and checked a second access model at 14 capacities with KVSET. These are compatibility measurements made by the publisher. Independent reproduction and use belong in the ledger when observed. The program target remains 158 independent downstream repositories. On 2026-11-23, Horizon Labs reported 162 GitHub repositories using its models across its portfolio. On 2026-11-24 the same report listed 167. [Horizon report](https://horizon-labs.ai/)
+The project ran its own GuideLLM 0.8.1 integration check, compared 14 serial LRU hit counts with upstream PrefixSim and checked a second access model at 14 capacities with KVSET. These are compatibility measurements made by the publisher. Independent reproduction and use belong in the ledger when observed. The program target remains 158 independent downstream repositories. On 2026-11-23, Horizon Labs reported 162 GitHub repositories using its models across its portfolio. The same report listed 167 on 2026-11-24 and 173 on 2026-11-25. [Horizon report](https://horizon-labs.ai/)
+
+On 2026-11-25 the publisher [tested prompt reuse in llama-cpp-python 0.3.16](trace_sources.md#llamacpp-prompt-reuse) with and without saved states. This is a local engine compatibility check.
