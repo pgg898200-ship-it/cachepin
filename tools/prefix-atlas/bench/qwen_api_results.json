@@ -1,0 +1,47 @@
+{
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "arch": "x86_64",
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "compiler": "c++ (Debian 14.2.0-19) 14.2.0",
+  "flags": [
+    "-O3",
+    "-DNDEBUG",
+    "-march=native",
+    "-std=c++17"
+  ],
+  "warmups": 1,
+  "samples": 5,
+  "results": [
+    {
+      "name": "qwen-api",
+      "nodes": 171233,
+      "requests": 172800,
+      "page_accesses": 9794201,
+      "mode": "prefix",
+      "capacities": "0,1024,8192,65536,92385,92386,1048576,4451267",
+      "input_sha256": "2ba9b6f08fc5986a787654acd446032ebc7a51c1171bb8224b8ffe91c8da95ca",
+      "histogram_sha256": "705571eaa2ce899784b4a8355921240929395fd2f7d37d8d5e177f686487e56a",
+      "milliseconds": {
+        "curve": [
+          248.431556,
+          210.146659,
+          208.983031,
+          263.515386,
+          210.023898
+        ],
+        "expanded": [
+          246.958377,
+          226.325176,
+          228.701555,
+          214.415313,
+          200.143531
+        ]
+      },
+      "median_ms": {
+        "curve": 210.146659,
+        "expanded": 226.325176
+      },
+      "speedup": 1.0769867914007616
+    }
+  ]
+}

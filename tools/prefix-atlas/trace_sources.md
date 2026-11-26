@@ -108,3 +108,33 @@ python bench/check_llama_cpp.py /tmp/stories260K.gguf
 ```
 
 The check verifies the model SHA-256, interns exact token prefixes for the CLI, and compares its cumulative counts with the engine’s per-request counts. It uses one CPU inference thread and requires no endpoint or GPU.
+
+## Qwen Bailian API
+
+On 2026-11-26 we tested the complete To-B trace from Alibaba’s Qwen serving cluster on Aliyun Bailian. The publisher describes this workload as API-driven task automation collected in December 2024. All 172,800 arrivals are included, from 0 to 7,199.97 seconds, with source order preserved at tied timestamps. Each request contributes its input hashes through the last complete 16-token block. Each prefix lookup starts at the root. Decode tokens are excluded. The original JSONL is 96,209,982 bytes. The download helper verifies its Git LFS SHA-256. [Pinned source and Apache 2.0 license](https://github.com/alibaba-edu/qwen-bailian-usagetraces-anon/tree/5f7439c51ec248a0c585f7d90a41a6f57773b912) · [Wang et al., USENIX ATC ’25](https://www.usenix.org/conference/atc25/presentation/wang-jiahao)
+
+| Capacity in pages | Hit pages out of 9,794,201 references |
+| ---: | ---: |
+| 0 | 0 |
+| 1,024 | 1,911,449 |
+| 8,192 | 3,430,082 |
+| 65,536 | 4,792,686 |
+| 92,385 | 4,897,100 |
+| 92,386 | 4,897,104 |
+| 1,048,576 | 5,269,154 |
+| 4,451,267 | 5,312,091 |
+
+The half-hit threshold lies one page above 92,385, where the hit count falls one short of the 4,897,101 needed. Even an unlimited cache can serve only 54.24% of references under this serial model. We checked the ceiling directly from the JSONL by sorting the request paths lexicographically and counting new prefix pages after each path diverges from its predecessor. This gives 4,482,110 distinct prefix pages. Counting only the 3,768,974 distinct block IDs would imply 61.52% reuse and overcount potential hits by 713,136. The same block after two different prefixes needs distinct KV state.
+
+The page-by-page native control matched the CLI’s hit counts at all eight budgets. Median times for the prepared tree over five runs were 210 ms for Prefix Atlas and 226 ms for the control. These timings exclude import, model execution and network I/O. [Raw timings, machine and output checksum](bench/qwen_api_results.json)
+
+Run from the Prefix Atlas tool directory with the CLI installed:
+
+```sh
+python3 bench/fetch_traces.py qwen-api /tmp/qwen-api.jsonl
+python3 mooncake.py --block-size 16 /tmp/qwen-api.jsonl > /tmp/qwen-api.tree
+caps=0,1024,8192,65536,92385,92386,1048576,4451267
+prefix-atlas /tmp/qwen-api.tree --capacities "$caps"
+python3 bench/check_reuse_ceiling.py --block-size 16 /tmp/qwen-api.jsonl
+python3 bench/compare_curves.py --no-synthetic --repeats 5 --prefix-capacities "$caps" /tmp/qwen-api.tree
+```

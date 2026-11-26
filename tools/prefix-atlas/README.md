@@ -53,6 +53,8 @@ The importer accepts numeric timestamps, input lengths and integer hash lists, s
 
 ## What was measured
 
+On Alibaba’s two-hour Qwen Bailian API trace, a serial prefix cache needs **92,386 sixteen-token pages** to serve half of the 9,794,201 complete page references. Counting repeated block IDs alone overstates maximum reuse by 7.28 percentage points because a block can occur after different prefixes. [Qwen workload, exact counts and reproduction](trace_sources.md#qwen-bailian-api)
+
 On Mooncake’s FAST’25 **conversation** trace, an 8,192-page cache served 54,387 of 276,491 complete page references (19.67%). Even an unlimited cache could serve only 38.19%, so an 80% target is unreachable on that workload. [Conversation trace, counts and reproduction commands](trace_sources.md#mooncake-conversation)
 
 | Workload and operation | Prefix Atlas | Native page-by-page control | Ratio |
