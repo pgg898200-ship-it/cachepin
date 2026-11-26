@@ -262,6 +262,20 @@ void edge_cases() {
           "feed after EOF was not inert");
 }
 
+void bulk_chunks() {
+    const Markers markers{"<END", "[end", std::string("\0!", 2), "\xff!"};
+    for (std::size_t size : {127, 128, 129, 255, 256, 257, 512}) {
+        std::string literal(size, 'x');
+        fragmented(markers, {literal});
+        for (const auto& stop : markers) {
+            fragmented(markers, {literal + stop + "unread"});
+            fragmented(markers, {literal + stop.substr(0, 1), stop.substr(1) + literal});
+            fragmented(markers, {stop.substr(0, 1), literal + stop});
+        }
+        fragmented(markers, {literal + "[end<END"});
+    }
+}
+
 void randomized() {
     std::mt19937 rng(0xf10dd15u);
     const auto rand_bytes = [&](std::size_t length) {
@@ -299,6 +313,7 @@ void randomized() {
 int main() {
     try {
         edge_cases();
+        bulk_chunks();
         exhaustive();
         randomized();
         std::cout << checks << " differential checks passed\n";

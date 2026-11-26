@@ -237,6 +237,14 @@ template<class Engine> Timing time_run(const Case& spec, const Stats& expected) 
             double(cpu_end-cpu_begin) * 1e9 / CLOCKS_PER_SEC / expected.calls};
 }
 
+// A complete stop of the fourth start-byte class near the front leaves most
+// of the supplied chunk unread. This exposes the cost of scanning ahead.
+Case early_bulk_stop() {
+    auto spec = make_case("four-bulk-early",4,4096,256,false,true);
+    for (auto& bytes : spec.payloads) bytes.replace(1, spec.patterns.words[3].size(), spec.patterns.words[3]);
+    return spec;
+}
+
 int main(int argc, char** argv) {
     if (argc > 2) return 2;
     const int samples = argc == 2 ? std::stoi(argv[1]) : 7;
@@ -250,6 +258,7 @@ int main(int argc, char** argv) {
         make_case("single-large",1,4096,64,false),
         make_case("four-large",4,4096,64,false,true),
         make_case("four-bulk",4,4096,256,false,true),
+        early_bulk_stop(),
         make_case("many-prefix",32,4096,4,true),
         make_case("single-prefix",1,4096,4,true)
     };

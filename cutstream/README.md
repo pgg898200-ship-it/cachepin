@@ -29,7 +29,9 @@ A second CI run repeated the same four fixtures on an AMD EPYC 7763 and an ARM64
 
 **Where it pays off.** On a separate AMD EPYC 9V74, an owned-output replay of 300 recorded SDK deltas across 512 streams took 20.41 CPU ns/feed against 48.39 for llama.cpp's pinned stop-search functions in a bounded-buffer adapter. A native 32-marker near-miss workload with 4,096 interleaved streams took 8.85 CPU ns/feed against 132.43 for a grouped prefix rescanner with equivalent release timing. The results cover host-side matching and emission. [llama.cpp replay](compare/llamacpp.py) · [Raw samples](evidence/llamacpp.csv) · [Native benchmark](bench/README.md)
 
-**Where it loses.** With four stops and 256-byte chunks, fixed-window search took 39.06 CPU ns/feed against Cutstream's 92.77, at the cost of later release. Compiling a fresh one-stop plan for a 64-byte response delivered in one chunk took 1.36 µs in Cutstream against 1.05 µs in vLLM's Python routines. For four-byte chunks with four reusable markers, the same vLLM comparison took 880 ns/feed against Cutstream's 110. [Native samples](bench/results.csv) · [Pinned vLLM routines, cold and warm results](compare/README.md)
+**Where it loses.** In the published 0.1.0 benchmark with four stops and 256-byte chunks, fixed-window search took 39.06 CPU ns/feed against Cutstream's 92.77, at the cost of later release. Compiling a fresh one-stop plan for a 64-byte response delivered in one chunk took 1.36 µs in Cutstream against 1.05 µs in vLLM's Python routines. For four-byte chunks with four reusable markers, the same vLLM comparison took 880 ns/feed against Cutstream's 110. [Native samples](bench/results.csv) · [Pinned vLLM routines, cold and warm results](compare/README.md)
+
+The [development-header bulk comparison](bench/README.md#bulk-chunks-with-four-marker-starts) repeats that workload and adds an early-stop loss case. The development header took 31.01 CPU ns/feed on the ordinary bulk fixture and 30.52–30.76 on the early stop, where fixed-window search took 25.15–26.61.
 
 ## Install
 

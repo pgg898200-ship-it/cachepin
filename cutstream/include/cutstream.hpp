@@ -90,6 +90,12 @@ public:
         const std::string_view old = spelling(cursor.state_);
         std::uint32_t state = cursor.state_;
         std::size_t pos = 0;
+        // From the root, bytes before the first possible marker start are literal.
+        // On large chunks a few bounded memchr calls avoid a per-byte root lookup.
+        if (chunk.size() >= 128 && state == 0 && bulk_start_count_ != 0) {
+            pos = first_bulk_start(chunk);
+            if (pos == chunk.size()) return {{}, chunk, pos, -1};
+        }
         int matched = -1;
         while (pos < chunk.size()) {
             if (state == 0) {
@@ -143,8 +149,30 @@ private:
     std::array<std::uint16_t, 256> classes_{};
     std::array<std::uint32_t, 256> root_{};
     std::size_t stride_ = 1;
+    std::array<unsigned char, 4> bulk_starts_{};
+    unsigned bulk_start_count_ = 0;
     bool single_start_ = false;
     unsigned char start_ = 0;
+
+    std::size_t first_bulk_start(std::string_view chunk) const noexcept {
+        // Bound speculative reads when a stop occurs early in a large chunk.
+        // A short scalar probe avoids scanning a whole block for a stop near
+        // the beginning. The caller only enters here with at least 128 bytes.
+        for (std::size_t i = 0; i < 8; ++i)
+            if (root_[static_cast<unsigned char>(chunk[i])]) return i;
+        std::size_t offset = 8;
+        while (offset < chunk.size()) {
+            const auto block = chunk.substr(offset, 256);
+            auto first = block.size();
+            for (unsigned i = 0; i < bulk_start_count_ && first; ++i) {
+                const void* hit = std::memchr(block.data(), bulk_starts_[i], first);
+                if (hit) first = static_cast<const char*>(hit) - block.data();
+            }
+            if (first != block.size()) return offset + first;
+            offset += block.size();
+        }
+        return offset;
+    }
 
     std::string_view spelling(std::uint32_t state) const noexcept {
         if (!state) return {};
@@ -178,11 +206,13 @@ private:
             if (!starts[first]) {
                 starts[first] = true;
                 start_ = first;
+                if (start_count < bulk_starts_.size()) bulk_starts_[start_count] = first;
                 ++start_count;
             }
             for (unsigned char c : stop)
                 if (!classes_[c]) classes_[c] = static_cast<std::uint16_t>(stride_++);
         }
+        bulk_start_count_ = start_count >= 2 && start_count <= bulk_starts_.size() ? start_count : 0;
         single_start_ = start_count == 1;
         nodes_.clear();
         table_.clear();
