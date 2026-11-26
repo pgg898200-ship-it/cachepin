@@ -40,6 +40,8 @@ Two replicas shared two execution slots on one host. Every launched copy ran to 
 
 Trace replay holds measured durations fixed. The shared-slot experiment measured separate runs and included queueing and host scheduling. At a different load, a backup can wait for capacity and delay later requests. The published GPU evaluation is retrospective. [Local protocol and raw results](examples/README.md) · [GPU methodology, pinned source and reproduction](external/README.md)
 
+[Compare primary-only, a fixed timer, and the same timer with a live 25% duplicate cap](experiments/shared-slots/budget/README.md). The experiment measures deadline misses and tail latency under identical offered workloads.
+
 ## Live aggregation for large fanouts
 
 ```sh

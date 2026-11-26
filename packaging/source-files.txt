@@ -16,6 +16,9 @@ examples/README.md
 examples/live_ab.py
 examples/loopback.csv
 experiments/shared-slots/README.md
+experiments/shared-slots/budget/README.md
+experiments/shared-slots/budget/local-runs.csv
+experiments/shared-slots/compare_cap.py
 experiments/shared-slots/deadline-misses.png
 experiments/shared-slots/hedging-under-load.ipynb
 experiments/shared-slots/load.cpp

@@ -2,6 +2,8 @@
 
 This experiment tests Racecurve v0.1.0's published 1,177 µs hedge delay at three offered loads, using real threads and two shared execution slots. It measures what happens when a fast backup still has to wait for capacity and completed losers still consume it.
 
+[Follow-up: enforcing the 25% backup budget under load](budget/README.md)
+
 ## Protocol
 
 The primary and backup each have a FIFO request queue and two worker threads. All four workers acquire permits from the same two-slot FIFO semaphore. Each admitted branch sleeps for its service duration while holding its permit. This models a constrained shared executor or downstream connection pool. The study runs entirely on one host. There is no HTTP, GPU, remote provider or busy-loop compute in the measurements.

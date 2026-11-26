@@ -107,9 +107,10 @@ public:
 };
 
 int main(int argc, char** argv) {
-    if(argc != 3) { std::cerr<<"load RATE DELAY_US|-1 < service_times.txt\n"; return 2; }
+    if(argc != 3 && argc != 4) { std::cerr<<"load RATE DELAY_US|-1 [MAX_LAUNCH_PCT] < service_times.txt\n"; return 2; }
     const int rate=std::stoi(argv[1]), delay=std::stoi(argv[2]);
-    if(rate <= 0 || delay < -1) return 2;
+    const int cap = argc == 4 ? std::stoi(argv[3]) : 100;
+    if(rate <= 0 || delay < -1 || cap < 0 || cap > 100) return 2;
     std::vector<Request> requests;
     int primary=0, backup=0;
     while(std::cin>>primary>>backup) {
@@ -126,6 +127,7 @@ int main(int argc, char** argv) {
     Slots slots;
     Pool p(0,epoch,requests,slots,response_mutex), b(1,epoch,requests,slots,response_mutex);
     size_t arrived=0, next_timer=0;
+    std::uint64_t launches=0;
     // Relative to actual primary submit. Timer deadlines preserve request order.
     while(arrived<requests.size() || (delay>=0 && next_timer<arrived)) {
         const bool timer_due=delay>=0 && next_timer<arrived;
@@ -136,7 +138,13 @@ int main(int argc, char** argv) {
         } else {
             std::this_thread::sleep_until(epoch+std::chrono::nanoseconds(due));
             std::lock_guard lock(response_mutex);
-            if(requests[next_timer].first == -1) b.submit(next_timer);
+            // Timer decisions follow request order. Count every decision in
+            // the denominator, including requests that already finished.
+            if (requests[next_timer].first == -1 &&
+                (launches + 1) * 100 <= (next_timer + 1) * static_cast<std::uint64_t>(cap)) {
+                b.submit(next_timer);
+                ++launches;
+            }
             ++next_timer;
         }
     }
