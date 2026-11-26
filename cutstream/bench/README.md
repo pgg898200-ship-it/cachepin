@@ -1,6 +1,6 @@
 # Streaming stop benchmark
 
-The benchmark sends 256 bytes per stream through a single calling thread. It advances each stream by one chunk per round in a fixed order. A quarter of the streams end in a complete stop, with the other three quarters ending at EOF. Patterns, payloads and cursors are constructed before timing. Cursor allocations triggered by a feed count toward its time. Results include feed, EOF flush and emitted byte-count accounting. They exclude tokenization, IO, output copying and hashing.
+The benchmark sends 256 bytes per stream through a single calling thread. It advances each stream by one chunk per round in a fixed order. Except in the early-stop fixture described below, a quarter of the streams end in a complete stop, with the other three quarters ending at EOF. Patterns, payloads and cursors are constructed before timing. Cursor allocations triggered by a feed count toward its time. Results include feed, EOF flush and emitted byte-count accounting. They exclude tokenization, IO, output copying and hashing.
 
 To reproduce the native benchmark from the project root on Linux, run
 
@@ -50,3 +50,30 @@ Two publisher-run processes on Linux x86-64 (AMD EPYC 9V74, Debian 13, GCC 14.2.
 | Frequent incomplete prefixes | 4 | 6.889 | 30.735 | 4.46× / 3.93× |
 
 The grouped literal rescanner was the closest comparator in each of these four cases. All four engines' CPU and wall samples, counts and output checksums are in the [first run](pcre2.csv) and [repeat](pcre2-repeat.csv). These measurements cover a reused plan and one worker on synthetic byte streams. They exclude JIT startup, output copying, network latency and model inference.
+
+
+## Bulk chunks with four marker starts
+
+On 2026-11-26 we compared the [baseline header](https://github.com/pgg898200-ship-it/cachepin/blob/5b36dfe999772365d434d119991ffa3595d241ea/cutstream/include/cutstream.hpp) and the development header with the same benchmark driver. For chunks of at least 128 bytes starting in the root state, plans with two to four distinct starting bytes can locate the first candidate with bounded libc searches. An eight-byte scalar probe handles an early candidate. The four-byte cursor and per-feed release semantics are unchanged.
+
+The ordinary fixture sends a 256-byte chunk to each of 4,096 streams. One quarter end in a stop and the remaining chunks contain no stop. In the early-stop fixture, every chunk contains the fourth marker at offset one. Each entry is median process CPU ns/feed from two separate runs of each binary on one Linux x86-64 AMD EPYC 9V74 host with GCC 14.2.0. The fixed-window column comes from the development binary.
+
+| 256-byte input | Baseline | Development | Fixed window |
+| --- | ---: | ---: | ---: |
+| Ordinary | 91.797 / 94.727 | 31.006 / 31.006 | 38.818 / 39.062 |
+| Fourth marker at offset one | 29.785 / 29.785 | 30.762 / 30.518 | 25.146 / 26.611 |
+
+The early-stop case remains a loss against fixed-window search and was slightly slower than the baseline. All 33 case/engine combinations retained their emitted-byte checksum, consumed count and held-byte statistics across builds. The original ten-case results above describe the public 0.1.0 header. [All four runs and individual CPU/wall samples](bulk-samples.csv)
+
+From the Cutstream directory in a Git checkout with the baseline commit available:
+
+```sh
+work=$(mktemp -d)
+mkdir "$work/baseline"
+git show 5b36dfe999772365d434d119991ffa3595d241ea:cutstream/include/cutstream.hpp > "$work/baseline/cutstream.hpp"
+c++ -std=c++17 -O3 -DNDEBUG -I"$work/baseline" bench/bench.cpp -o "$work/before"
+c++ -std=c++17 -O3 -DNDEBUG -Iinclude bench/bench.cpp -o "$work/after"
+for run in before-1 after-1 after-2 before-2; do
+    "$work/${run%-*}" 9 > "$work/$run.csv"
+done
+```

@@ -23,3 +23,7 @@ An [external directory listing](https://findsafeskills.com/listings/pgg898200-sh
 Two publisher-run processes compared PCRE2 10.46 JIT hard partial matching with Cutstream on four single-marker streaming workloads. The ratio of median PCRE2 to Cutstream CPU time ranged from 3.84× to 5.68× across the eight paired measurements. The existing fixed-window bulk loss and cold-plan vLLM loss remain recorded in the [performance summary](../README.md#measured-performance). [Workload, reproduction commands and raw samples](../bench/README.md#single-literal-against-pcre2-jit)
 
 Preannounced discovery question: “How can a gateway stream text immediately without leaking part of a stop string across chunk boundaries?” The first returned page was [Akamai's response-body processing guide](https://techdocs.akamai.com/edgeworkers/docs/process-response-bodies). A case-insensitive page search for Cutstream returned no match. The benchmark repeats above are internal. Verified counts remain 0/158 downstream repositories, 0 repeat integrations and 0 external reproductions.
+
+## 2026-11-26 — bulk loss retest
+
+On the four-start, 256-byte ordinary fixture, the development header took 31.006 CPU ns/feed in two runs versus 91.797 and 94.727 for the baseline. The early-stop fixture still favors the fixed-window comparator (25.146 and 26.611 versus 30.762 and 30.518). These are publisher-run comparisons with exact per-feed differential validation and the same compiler and driver across builds. [Method and all raw samples](../bench/README.md#bulk-chunks-with-four-marker-starts)
