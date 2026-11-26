@@ -18,6 +18,11 @@ CONVERSATION = (
     "3cca71daccf2a7afb8fe3f0295358f70e3a69fdb/FAST25-release/traces/conversation_trace.jsonl",
     "b8cbb061a85206d729d91cdc2981f43c9e0d99209dce588d3af5f7934408b9df",
 )
+QWEN_API = (
+    "https://media.githubusercontent.com/media/alibaba-edu/qwen-bailian-usagetraces-anon/"
+    "5f7439c51ec248a0c585f7d90a41a6f57773b912/qwen_traceB_blksz_16.jsonl?download=1",
+    "68e3f98e2d601d60d0abf4b89bc8a3654372abab7b1cde6373a13d0054379d59",
+)
 HARVARD = (
     "https://huggingface.co/datasets/harvardMadsys/freeinference_agentic_trace/resolve/"
     "bb26cf72c9c20f2b05f765d88548156a74d3c253/release/2026-05-17_2026-05-23/"
@@ -54,7 +59,8 @@ def project_harvard(source, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    sources = {"mooncake": MOONCAKE, "conversation": CONVERSATION, "harvard": HARVARD}
+    sources = {"mooncake": MOONCAKE, "conversation": CONVERSATION, "harvard": HARVARD,
+               "qwen-api": QWEN_API}
     parser.add_argument("dataset", choices=sources)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
