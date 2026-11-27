@@ -8,10 +8,10 @@ Prefix Atlas computes an exact capacity curve from a tree of shared prompt histo
 
 ## Install the CLI
 
-Linux x86-64 users with Python 3.9+ and glibc 2.17+ can install the 206 KiB wheel without a compiler:
+On Linux ARM64 (AArch64) or x86-64, install the prebuilt CLI with Python 3.9+ and pip. The ARM64 analyzer is statically linked. The x86-64 wheel requires glibc 2.17 or newer.
 
 ```sh
-python -m pip install --no-index --find-links https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/dist/ prefix-atlas==0.1.0
+python -m pip install --no-index --only-binary=:all: --find-links https://pgg898200-ship-it.github.io/cachepin/prefix-atlas/dist/ prefix-atlas==0.1.0
 ```
 
 With Python 3.9+ and a Unix-like C++17 toolchain, pip can build the source archive without a Git checkout. Pip downloads setuptools for the isolated build. The installed CLI has no Python runtime dependencies.
