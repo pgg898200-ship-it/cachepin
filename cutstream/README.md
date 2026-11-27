@@ -87,6 +87,19 @@ printf 'hello </tool>trailing' | cutstream --stop '</tool>'
 
 The command prints `hello ` and discards the delimiter and trailing bytes. A locally built Linux wheel may depend on the builder's glibc and C++ runtime. Build separately for each target image and Python ABI.
 
+### Pipe Ollama generation into the CLI
+
+Install the development CLI with `python -m pip install ./cutstream` from this repository's root. With a local Ollama server and an already-installed model, pipe its newline-delimited JSON output into Cutstream:
+
+```sh
+curl -fsSN http://localhost:11434/api/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"gemma3","prompt":"Write a greeting, then </end>","stream":true}' |
+  cutstream --input-format ollama-generate --stop '</end>'
+```
+
+Replace `gemma3` with your local model name. Only `response` text is written to stdout. A stop can span records. A `done: true` record flushes an unfinished stop prefix. If the upstream reports an error or ends before completion, the CLI returns a nonzero status and leaves the pending prefix withheld. A local match ends the reader immediately. This mode targets [Ollama's generate endpoint](https://docs.ollama.com/api/generate). The public 0.1.0 CLI accepts raw bytes.
+
 ## What it guarantees
 
 The earliest **ending byte** wins. Among markers ending together, the longest wins, with original index breaking duplicates. Zero markers pass through every byte. An empty marker is rejected. A hit consumes through the delimiter, leaving trailing bytes available to a framing caller. EOF flushes an incomplete marker literally. These byte rules are independent of transport partitioning and preserve arbitrary binary input. A text sink should apply an incremental character decoder to the visible bytes.

@@ -1,4 +1,8 @@
 import asyncio
+import os
+import select
+import subprocess
+import sys
 import importlib.util
 from pathlib import Path
 import unittest
@@ -85,3 +89,53 @@ class PythonApi(unittest.TestCase):
 
         self.assertEqual(asyncio.run(collect("tool>hidden", None)), ["😀hi"])
         self.assertEqual(asyncio.run(collect("to", "length")), ["😀hi", "</to"])
+
+
+class CliInput(unittest.TestCase):
+    def invoke(self, data, *args):
+        return subprocess.run([sys.executable, "-m", "cutstream", "--stop", "it is", *args],
+                              input=data, capture_output=True)
+
+    def test_ollama_split_stop(self):
+        # Deltas from ollama-python's test_client_generate_stream.
+        data = (b'{"response":"Because "}\n{"response":"it "}\n'
+                b'{"response":"is."}\ninvalid unread tail\n')
+        result = self.invoke(data, "--input-format", "ollama-generate")
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b"Because ", b""))
+
+    def test_ollama_done_flushes_text_only(self):
+        data = ('{"thinking":"it is"}\n{"model":"it is","response":"雪"}\n'
+                '{"response":"it ","done":true}\ninvalid unread tail\n').encode()
+        result = self.invoke(data, "--input-format", "ollama-generate")
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "雪it ".encode(), b""))
+
+    def test_ollama_failure_preserves_only_committed_output(self):
+        prefix = b'{"response":"visible it "}\n'
+        for tail in (b"", b'{"error":"generation failed"}\n', b"bad json\n",
+                     b'{"message":{"content":"chat"}}\n', b'{"response":null}\n'):
+            with self.subTest(tail=tail):
+                result = self.invoke(prefix + tail, "--input-format", "ollama-generate")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, b"visible ")
+                self.assertIn(b"cutstream:", result.stderr)
+
+    def test_raw_default_preserves_binary(self):
+        self.assertEqual(self.invoke(b"\xff\x00it is hidden").stdout, b"\xff\x00")
+
+    @unittest.skipUnless(os.name == "posix", "select on a pipe requires POSIX")
+    def test_ollama_emits_before_eof(self):
+        command = [sys.executable, "-m", "cutstream", "--input-format", "ollama-generate",
+                   "--stop", "it is"]
+        with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE) as child:
+            try:
+                child.stdin.write('{"response":"雪 it "}\n'.encode())
+                child.stdin.flush()
+                self.assertTrue(select.select([child.stdout], [], [], 5)[0])
+                self.assertEqual(os.read(child.stdout.fileno(), 64), "雪 ".encode())
+                child.stdin.write(b'{"response":"is hidden"}\n')
+                child.stdin.flush()
+                self.assertEqual(child.wait(timeout=5), 0)
+                self.assertEqual(child.stdout.read(), b"")
+            finally:
+                if child.poll() is None:
+                    child.kill()
