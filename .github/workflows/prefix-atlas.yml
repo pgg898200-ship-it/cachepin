@@ -38,3 +38,18 @@ jobs:
         run: |
           cmp demo/index.html ../../site/prefix-atlas/index.html
           python bench/check_browser.py
+
+  arm64-wheel:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the ARM64 wheel and check the packaged analyzer
+        run: |
+          test "$(uname -m)" = aarch64
+          python -m pip install --no-index --only-binary=:all: --find-links site/prefix-atlas/dist prefix-atlas==0.1.0
+          prefix-atlas tools/prefix-atlas/examples/freeinference-may17.tree --capacities 8822 | grep -Fx '8822,4547539,5684383'
+          kernel=$(python -c 'from prefix_atlas.cli import KERNEL; print(KERNEL)')
+          python tools/prefix-atlas/test_curve.py "$kernel"
