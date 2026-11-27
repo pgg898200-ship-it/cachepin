@@ -68,6 +68,10 @@ auto misses_at_1ms = policies.at(1000).group_misses;
 
 Across 10 million generated leaves and 16,384 delays, one worker ingested 85.2 million leaves/s and finalized in 0.147 ms on the test host. This includes generation and excludes CSV, network and service execution. The 200,000-leaf comparison measured 0.918 ms for a fresh 1,024-delay curve versus 409.780 ms for direct replay and 15.756 ms for sort-and-scan from scratch. A prebuilt sorted index wins on repeated queries. Direct replay wins for a single delay. A tuned full-domain histogram won a separate cold build by 1.20× with 33.5× the raw index memory on that workload. [All benchmark code, timings and crossover cases](benchmarks/README.md)
 
+## I only have Prometheus buckets
+
+For a shadow run that recorded both replicas on every request, export the classic histogram counts to bound misses and extra launches. On the GPUHedge holdout, a 10 s timer required exactly 11 launches, but the buckets allowed zero to six deadline misses. [Run the saved Prometheus example](integrations/prometheus.md)
+
 ## The primary was canceled. What can the trace tell me?
 
 Racecurve bounds missing service times. Use a winner log or explicit exact, interval, censored and unstarted observations. The Python CLI emits JSON for arbitrary delays. The browser also accepts these three CSV formats for single requests.
