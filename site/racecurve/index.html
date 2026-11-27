@@ -67,6 +67,19 @@
     th {font-size:.9em}
     figure { margin:2rem 0 }
     img { width:100%; height:auto; display:block; border:1px solid #cdcac0 }
+    @font-face { font-family:Instrument; src:url(../tools/fonts/instrument-sans.woff2) format("woff2") }
+    @font-face { font-family:Plex; src:url(../tools/fonts/ibm-plex-mono.woff2) format("woff2") }
+    .budget { padding:clamp(8px,2vw,20px); background:#fafafa; color:#141619; font-family:Instrument,sans-serif }
+    .budget caption { font-family:Instrument,sans-serif }
+    .budget td { font-family:Plex,monospace; font-size:.88em }
+    .meter { display:block; width:100%; height:4px; margin-top:4px; background:#dadde1 }
+    .meter i { display:block; height:100%; width:var(--value); background:#141619 }
+    .meter.capped i { background:#315bff }
+    @media (prefers-reduced-motion:no-preference) {
+      .meter.capped i { animation:cap-comparison 900ms ease-out }
+      @keyframes cap-comparison { from { width:98.25% } to { width:var(--value) } }
+    }
+    pre { overflow-x:auto; padding:1em; background:#fafafa; color:#141619; border:1px solid #dadde1 }
     footer { border-top:1px solid #132e30; margin-top:2rem; padding-top:1rem }
   </style>
 </head>
@@ -85,6 +98,22 @@
     </div>
     <p>Recompute the deadline misses in <a href="https://huggingface.co/datasets/pgg-engineering/racecurve-hedge-traces/viewer/shared_slot_load/test?sql=SELECT+offered_rps%2C+arm%2C+count%28%2A%29+AS+requests%2C%0A+++++++count_if%28first_ns+-+planned_ns+%3E+6000000%29+AS+missed_deadlines%2C%0A+++++++count_if%28backup_submit_ns+%3E%3D+0%29+AS+backups%0AFROM+read_parquet%28%27https%3A%2F%2Fhuggingface.co%2Fdatasets%2Fpgg-engineering%2Fracecurve-hedge-traces%2Fresolve%2Fcf1d6f40119e51aaad83ba6346c9d0190d21c4ea%2Fshared_slot_load%2Ftest%2F0000.parquet%27%29%0AGROUP+BY+offered_rps%2C+arm%0AORDER+BY+offered_rps%2C+arm&amp;sql_console=true">Hugging Face SQL</a> or the <a href="https://shell.duckdb.org/#queries=v0,SELECT-offered_rps%2C-arm%2C-count%28%2A%29-AS-requests%2C%0A-------count_if%28first_ns-%20-planned_ns-%3E-6000000%29-AS-missed_deadlines%2C%0A-------count_if%28backup_submit_ns-%3E%3D-0%29-AS-backups%0AFROM-read_parquet%28%27https%3A%2F%2Fhuggingface.co%2Fdatasets%2Fpgg%20engineering%2Fracecurve%20hedge%20traces%2Fresolve%2Fcf1d6f40119e51aaad83ba6346c9d0190d21c4ea%2Fshared_slot_load%2Ftest%2F0000.parquet%27%29%0AGROUP-BY-offered_rps%2C-arm%0AORDER-BY-offered_rps%2C-arm~">DuckDB shell</a>.</p>
     <p>At 1,600 requests/s, the timer launched 6,350 backups for 6,400 requests. Those copies competed for the same slots as the primaries. Services with independent capacity or effective cancellation can behave differently.</p>
+    <section aria-labelledby="backup-budget">
+      <h2 id="backup-budget">What changes with a 25% backup budget?</h2>
+      <p>On November 26, PGG tested a dispatcher that allows at most one backup per four requests cumulatively. It checks the budget when each timer fires. Both copies still run to completion on the same two slots.</p>
+      <div class="data budget" role="region" aria-label="Backup budget results" tabindex="0">
+        <table><caption>At 1,600 requests/s, across three seeds on the Hugging Face host</caption><thead><tr><th scope="col">Policy</th><th scope="col">Requests</th><th scope="col">6 ms misses</th><th scope="col">Backups</th></tr></thead><tbody><tr><th scope="row">Primary only</th><td>9,600</td><td>2,042<span aria-hidden="true" class="meter" style="--value:21.2708%"><i></i></span></td><td>0</td></tr><tr><th scope="row">Fixed timer with cap</th><td>9,600</td><td>3,915<span aria-hidden="true" class="meter capped" style="--value:40.78125%"><i></i></span></td><td>2,400</td></tr><tr><th scope="row">Fixed timer</th><td>9,600</td><td>9,432<span aria-hidden="true" class="meter" style="--value:98.25%"><i></i></span></td><td>9,519</td></tr></tbody></table>
+      </div>
+      <p>The cap prevented 5,517 misses compared with the fixed timer. Disabling backups prevented another 1,873 at this load. The result depends on offered load. At 400 requests/s, both hedge policies missed one of 2,400 deadlines and primary-only missed 204.</p>
+      <p><a href="https://huggingface.co/datasets/pgg-engineering/racecurve-hedge-traces/resolve/6f3fd69316fe59fba97b6d866d38736f0b87d0bb/data/budgeted-shared-slots.csv.gz">Download the 82,800 request rows (CSV.gz)</a>. Open DuckDB in the download directory and run the query below. Change the rate or the deadline in nanoseconds to compare policies for another target. <a href="https://github.com/pgg898200-ship-it/cachepin/tree/5b598e9d687fa2669db11d9c8b5d9b2df7758df1/experiments/shared-slots/budget">Read the three-policy experiment protocol</a>.</p>
+      <pre tabindex="0" aria-label="DuckDB query"><code>SELECT policy, count(*) AS requests,
+       count_if(first_ns - planned_ns &gt; 6000000) AS misses,
+       count_if(backup_submit_ns &gt;= 0) AS backups
+FROM read_csv(&#x27;budgeted-shared-slots.csv.gz&#x27;)
+WHERE rate_rps = 1600
+GROUP BY policy
+ORDER BY misses;</code></pre>
+    </section>
     <footer><a href="../on-call/#hedge-budget">Try the hedge-budget drill</a><a href="https://github.com/pgg898200-ship-it/cachepin/tree/8f963f09edf68942f9ac6e304e7635d4cf41a27e/experiments/shared-slots">Experiment protocol</a><a href="https://huggingface.co/datasets/pgg-engineering/racecurve-hedge-traces/resolve/efd1d491158d8b5ac4ff787f05dd05196700d60c/data/shared-slots.csv.gz">Download trace (CSV.gz)</a><a href="https://huggingface.co/spaces/pgg-engineering/racecurve">Racecurve explorer</a><a href="./deadline-misses.png">Download chart</a></footer>
   </article></main>
 </body>
