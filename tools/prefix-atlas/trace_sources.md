@@ -138,3 +138,27 @@ prefix-atlas /tmp/qwen-api.tree --capacities "$caps"
 python3 bench/check_reuse_ceiling.py --block-size 16 /tmp/qwen-api.jsonl
 python3 bench/compare_curves.py --no-synthetic --repeats 5 --prefix-capacities "$caps" /tmp/qwen-api.tree
 ```
+
+## Weka Claude Code sessions
+
+On 2026-11-28 we tested the first seven complete sessions in the first 32 MiB of SemiAnalysis’s May 12, 2026 Weka no-subagents JSONL release. These are top-level calls from production Claude Code traffic. The file uses session-local block IDs, a 64-token page and the proxy’s tokenizer. We excluded the incomplete eighth record. The seven sessions contain 761 requests across nine session/model pairs. This file-order sample does not estimate the distribution across all 949 sessions. [Pinned dataset, schema and Apache 2.0 license](https://huggingface.co/datasets/semianalysisai/cc-traces-weka-no-subagents-051226/tree/0ae681ae27a0e3e716b344cb21f1b01bb1313d52)
+
+Each session/model pair starts with its own empty cache and receives the stated page budget. Requests are stable-sorted by recorded arrival within that pair. Counts below sum hits across pairs and use all 1,962,000 complete prompt-page references as the denominator. Partial tails and output tokens are excluded.
+
+| Pages per cache | Serial LRU hit pages | Previous-request-only hit pages |
+| ---: | ---: | ---: |
+| 512 | 354,644 | 354,644 |
+| 2,048 | 1,086,847 | 1,086,847 |
+| 5,836 | 1,683,129 | 1,683,129 |
+| 5,837 | 1,683,130 | 1,683,130 |
+| 8,192 | 1,683,130 | 1,683,130 |
+| 65,536 | 1,683,130 | 1,683,130 |
+
+The comparison retains only the preceding request’s first *C* complete pages in each pair and counts its longest shared prefix with the new arrival. On these streams, looking farther back added zero hits at each tested capacity. There were 278,870 distinct full-prefix pages across the nine cold caches, so at most 1,683,130 references could hit. A budget of 5,837 pages per cache reached that ceiling; one fewer page lost one hit. This is a serial model result. It does not measure Claude’s deployed cache policy or a shared multi-session server.
+
+The harness validates the byte-range SHA-256, converts each stream for the installed CLI, and independently replays full-prefix page identities through an ordered LRU cache. It also computes the adjacent-request control and the distinct-page ceiling. Run from the tool directory:
+
+```sh
+curl -fL --range 0-33554431 'https://huggingface.co/datasets/semianalysisai/cc-traces-weka-no-subagents-051226/resolve/0ae681ae27a0e3e716b344cb21f1b01bb1313d52/traces.jsonl' -o /tmp/weka-first-32m.jsonl.part
+python3 bench/check_weka_sessions.py /tmp/weka-first-32m.jsonl.part
+```
