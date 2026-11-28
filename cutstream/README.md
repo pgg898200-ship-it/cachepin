@@ -66,6 +66,29 @@ auto out = stops.feed(cursor, "hello </to");
 
 The input span borrows the current chunk. The prefix span and EOF tail borrow the plan. Consume the views before the backing storage expires. Share a plan across threads with one cursor per ordered stream. Reset the cursor before switching plans.
 
+### Use Cutstream from CMake
+
+For a C++ application built with CMake 3.21 or later, add this after defining your `gateway` target. Replace `gateway` with your target name. This fetches a checksum-pinned development checkout and supplies the header path and C++17 compile feature.
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(cutstream_source
+    URL https://codeload.github.com/pgg898200-ship-it/cachepin/tar.gz/b4d5c3913d486ac1cab07e682d845b17ede80b86
+    URL_HASH SHA256=6f8aa8d295bed33b1c136d41a0c40a3bcd12869c4f39197d38cc0a39cbcc2c2d
+    SOURCE_SUBDIR cutstream)
+FetchContent_MakeAvailable(cutstream_source)
+target_link_libraries(gateway PRIVATE cutstream::cutstream)
+```
+
+For an offline build, vendor the pinned checkout and use `add_subdirectory(path/to/cachepin/cutstream cutstream-build)` before the same `target_link_libraries` call. To share an installation across projects, configure and install from the checkout root:
+
+```sh
+cmake -S cutstream -B build-cutstream -DCMAKE_INSTALL_PREFIX="$PWD/cutstream-prefix"
+cmake --install build-cutstream
+```
+
+Configure the consuming project with `-DCMAKE_PREFIX_PATH=/path/to/cutstream-prefix`. In its CMakeLists.txt, call `find_package(cutstream CONFIG REQUIRED)` and link `cutstream::cutstream`. The prefix can be moved before configuring the consumer. The public 0.1.0 source archive supports the single-header install above.
+
 ### Install on hosts without a compiler
 
 Build the wheel on a machine or container matching the target's CPython version, architecture and system libraries. For Linux with GCC, use a builder with Python development headers, pip, setuptools 77 or newer, and wheel installed. Start in an empty directory:
