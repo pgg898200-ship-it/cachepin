@@ -1,4 +1,5 @@
-include include/cutstream.hpp
+include CMakeLists.txt include/cutstream.hpp
+include tests/cmake/CMakeLists.txt tests/test_cmake.sh
 recursive-include tests *.cpp *.py
 recursive-include examples *.py
 recursive-include bench *.hpp *.cpp *.md *.csv

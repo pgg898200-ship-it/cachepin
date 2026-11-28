@@ -5,6 +5,7 @@ on:
     paths:
       - 'cutstream/src/**'
       - 'cutstream/tests/**'
+      - 'cutstream/CMakeLists.txt'
       - 'cutstream/setup.py'
       - 'cutstream/include/**'
       - 'cutstream/compare/turbospark/**'
@@ -16,6 +17,7 @@ on:
       - 'cutstream/include/**'
       - 'cutstream/src/**'
       - 'cutstream/tests/**'
+      - 'cutstream/CMakeLists.txt'
       - 'cutstream/compare/turbospark/**'
       - '.github/workflows/cutstream-rust-ci.yml'
   workflow_dispatch:
@@ -39,6 +41,7 @@ jobs:
           if [[ -f cutstream/include/cutstream.hpp ]]; then cd cutstream; fi
           c++ -std=c++17 -O3 -Wall -Wextra -Werror -Iinclude tests/test.cpp -o "$RUNNER_TEMP/cutstream-test"
           "$RUNNER_TEMP/cutstream-test"
+          bash tests/test_cmake.sh
           python3 -m venv "$RUNNER_TEMP/cutstream-venv"
           source "$RUNNER_TEMP/cutstream-venv/bin/activate"
           python -m pip install .
