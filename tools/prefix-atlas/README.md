@@ -53,6 +53,8 @@ The importer accepts numeric timestamps, input lengths and integer hash lists, s
 
 ## What was measured
 
+In seven complete SemiAnalysis Claude Code sessions (761 requests), retaining the preceding request’s prefix matched serial LRU at all six tested budgets. With an isolated cache for each session and model, 5,837 pages of 64 tokens reached the sample’s maximum 85.79% reuse. [Weka sample, controls and reproduction](trace_sources.md#weka-claude-code-sessions)
+
 On Alibaba’s two-hour Qwen Bailian API trace, a serial prefix cache needs **92,386 sixteen-token pages** to serve half of the 9,794,201 complete page references. Counting repeated block IDs alone overstates maximum reuse by 7.28 percentage points because a block can occur after different prefixes. [Qwen workload, exact counts and reproduction](trace_sources.md#qwen-bailian-api)
 
 On Mooncake’s FAST’25 **conversation** trace, an 8,192-page cache served 54,387 of 276,491 complete page references (19.67%). Even an unlimited cache could serve only 38.19%, so an 80% target is unreachable on that workload. [Conversation trace, counts and reproduction commands](trace_sources.md#mooncake-conversation)

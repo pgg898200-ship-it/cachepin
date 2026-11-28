@@ -20,3 +20,5 @@ The project ran its own GuideLLM 0.8.1 integration check, compared 14 serial LRU
 On 2026-11-25 the publisher [tested prompt reuse in llama-cpp-python 0.3.16](trace_sources.md#llamacpp-prompt-reuse) with and without saved states. This is a local engine compatibility check.
 
 On 2026-11-26 the publisher [checked the full Qwen Bailian API trace](trace_sources.md#qwen-bailian-api) against a page-by-page control and counted distinct prefix pages directly from the released hashes. Alibaba supplied the workload. The reproduction was run by PGG.
+
+On 2026-11-28 PGG [replayed seven complete SemiAnalysis Weka sessions](trace_sources.md#weka-claude-code-sessions) and compared the CLI with a page-by-page replay and a preceding-request baseline. SemiAnalysis supplied the public workload.
